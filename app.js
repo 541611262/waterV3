@@ -722,7 +722,7 @@ function addCustomer() {
     notesInput.value = '';
 }
 
-// 【方案三】改进的表格式导入功能 - 智能列检测和多历史记录支持
+// 【方案四】增强的表格式导入功能 - 解决Windows WPS兼容性问题
 function importData() {
     if (!csvFile.files.length) {
         importStatus.textContent = '请选择文件';
@@ -733,28 +733,497 @@ function importData() {
     const file = csvFile.files[0];
     const fileName = file.name.toLowerCase();
     
+    // 显示正在处理状态
+    importStatus.textContent = '正在处理文件，请稍候...';
+    importStatus.style.color = '#3498db';
+    
+    console.log('开始导入文件:', fileName, '文件大小:', file.size, 'bytes');
+    
     if (fileName.endsWith('.csv')) {
-        importCSV(file);
+        importCSVWithDebug(file);
     } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
-        importExcel(file);
+        importExcelWithDebug(file);
     } else {
         importStatus.textContent = '不支持的文件格式，请选择CSV或Excel文件';
         importStatus.style.color = '#e74c3c';
     }
 }
 
-// 导入CSV数据
+// 带调试信息的CSV导入
+function importCSVWithDebug(file) {
+    console.log('开始导入CSV文件:', file.name, '类型:', file.type, '大小:', file.size);
+    
+    // 检查文件是否为空
+    if (file.size === 0) {
+        importStatus.textContent = 'CSV文件为空，请检查文件内容';
+        importStatus.style.color = '#e74c3c';
+        return;
+    }
+    
+    // 尝试多种编码方式读取文件
+    tryMultipleEncodings(file, (content, encoding) => {
+        console.log('成功使用编码读取文件:', encoding);
+        console.log('文件内容预览(前200字符):', content.substring(0, 200));
+        
+        let cleanContent = content;
+        
+        // 移除各种BOM标记
+        if (cleanContent.charCodeAt(0) === 0xFEFF) {
+            cleanContent = cleanContent.slice(1);
+            console.log('移除UTF-8 BOM');
+        } else if (cleanContent.startsWith('\uFEFF')) {
+            cleanContent = cleanContent.slice(1);
+            console.log('移除Unicode BOM');
+        }
+        
+        // 统一行结束符处理
+        const originalLineCount = cleanContent.split(/\r\n|\r|\n/).length;
+        cleanContent = cleanContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        console.log('原始行数:', originalLineCount, '处理后行数:', cleanContent.split('\n').length);
+        
+        // 移除空行和只包含空白字符的行
+        const lines = cleanContent.split('\n').filter(line => line.trim() !== '');
+        console.log('过滤后有效行数:', lines.length);
+        
+        if (lines.length === 0) {
+            importStatus.textContent = 'CSV文件无有效数据行';
+            importStatus.style.color = '#e74c3c';
+            return;
+        }
+        
+        // 显示文件解析信息
+        console.log('文件解析完成，开始处理数据...');
+        processTableImportDataWithDebug(lines, ',');
+    });
+}
+
+// 带调试信息的Excel导入
+function importExcelWithDebug(file) {
+    console.log('开始导入Excel文件:', file.name, '类型:', file.type, '大小:', file.size);
+    
+    if (file.size === 0) {
+        importStatus.textContent = 'Excel文件为空，请检查文件内容';
+        importStatus.style.color = '#e74c3c';
+        return;
+    }
+    
+    const reader = new FileReader();
+    
+    reader.onload = (e) => {
+        try {
+            console.log('开始解析Excel文件...');
+            const data = new Uint8Array(e.target.result);
+            
+            // 使用更宽松的解析选项
+            const workbook = XLSX.read(data, { 
+                type: 'array',
+                cellDates: true,
+                cellNF: false,
+                cellText: false,
+                raw: false,
+                codepage: 65001, // UTF-8
+                // 处理Windows WPS Excel的特殊情况
+                WTF: true, // 允许更宽松的解析
+                cellStyles: false,
+                sheetRows: 0 // 读取所有行
+            });
+            
+            console.log('Excel工作簿信息:', {
+                sheetNames: workbook.SheetNames,
+                sheets: Object.keys(workbook.Sheets).length
+            });
+            
+            if (workbook.SheetNames.length === 0) {
+                importStatus.textContent = 'Excel文件没有工作表';
+                importStatus.style.color = '#e74c3c';
+                return;
+            }
+            
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            
+            console.log('使用工作表:', firstSheetName);
+            
+            // 获取工作表范围
+            const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:A1');
+            console.log('工作表范围:', range);
+            
+            // 使用多种方式尝试读取数据
+            let jsonData;
+            try {
+                // 方式1：标准转换
+                jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+                    header: 1, 
+                    raw: false,
+                    dateNF: 'yyyy-mm-dd',
+                    defval: '',
+                    blankrows: false
+                });
+                console.log('使用标准转换成功');
+            } catch (e1) {
+                console.log('标准转换失败，尝试原始转换:', e1.message);
+                try {
+                    // 方式2：原始转换
+                    jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+                        header: 1, 
+                        raw: true,
+                        defval: '',
+                        blankrows: false
+                    });
+                    console.log('使用原始转换成功');
+                } catch (e2) {
+                    console.log('原始转换也失败，使用基础转换:', e2.message);
+                    // 方式3：基础转换
+                    jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+                        header: 1,
+                        defval: ''
+                    });
+                    console.log('使用基础转换成功');
+                }
+            }
+            
+            console.log('Excel数据行数:', jsonData.length);
+            console.log('前3行数据预览:', jsonData.slice(0, 3));
+            
+            if (jsonData.length === 0) {
+                importStatus.textContent = 'Excel文件无数据';
+                importStatus.style.color = '#e74c3c';
+                return;
+            }
+            
+            // 转换为CSV格式进行处理
+            const lines = jsonData.map((row, rowIndex) => {
+                return row.map((cell, colIndex) => {
+                    if (cell === null || cell === undefined) {
+                        return '';
+                    }
+                    
+                    // 处理Excel数字格式的电话号码
+                    if (typeof cell === 'number' && cell > 999999999) {
+                        const phoneStr = Math.round(cell).toString();
+                        console.log(`第${rowIndex}行第${colIndex}列：数字${cell}转换为电话号码${phoneStr}`);
+                        return phoneStr;
+                    }
+                    
+                    // 处理日期
+                    if (cell instanceof Date) {
+                        const dateStr = cell.toISOString().split('T')[0];
+                        console.log(`第${rowIndex}行第${colIndex}列：日期${cell}转换为${dateStr}`);
+                        return dateStr;
+                    } else if (typeof cell === 'number' && cell > 1 && cell < 100000) {
+                        // Excel日期序列号
+                        try {
+                            const date = new Date((cell - 25569) * 86400 * 1000);
+                            if (!isNaN(date.getTime())) {
+                                const dateStr = date.toISOString().split('T')[0];
+                                console.log(`第${rowIndex}行第${colIndex}列：Excel日期序列号${cell}转换为${dateStr}`);
+                                return dateStr;
+                            }
+                        } catch (e) {
+                            console.log(`日期转换失败:`, cell, e.message);
+                        }
+                    }
+                    
+                    // 处理其他数据类型
+                    if (typeof cell === 'number') {
+                        return cell.toString();
+                    }
+                    
+                    const cellStr = String(cell).trim();
+                    
+                    // 如果包含特殊字符，用引号包围
+                    if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
+                        return `"${cellStr.replace(/"/g, '""')}"`;
+                    }
+                    return cellStr;
+                }).join(',');
+            }).filter(line => line.trim() !== '');
+            
+            console.log('Excel转CSV完成，有效行数:', lines.length);
+            processTableImportDataWithDebug(lines, ',');
+            
+        } catch (error) {
+            console.error('Excel解析错误:', error);
+            importStatus.textContent = `Excel文件解析失败: ${error.message}`;
+            importStatus.style.color = '#e74c3c';
+        }
+    };
+    
+    reader.onerror = () => {
+        console.error('Excel文件读取失败');
+        importStatus.textContent = 'Excel文件读取失败，请检查文件是否损坏';
+        importStatus.style.color = '#e74c3c';
+    };
+    
+    reader.readAsArrayBuffer(file);
+}
+
+// 尝试多种编码读取文件
+function tryMultipleEncodings(file, onSuccess) {
+    const encodings = ['UTF-8', 'GBK', 'GB2312', 'GB18030', 'ISO-8859-1', 'Windows-1252'];
+    let currentIndex = 0;
+    
+    function tryNextEncoding() {
+        if (currentIndex >= encodings.length) {
+            // 所有编码都尝试失败，尝试默认读取
+            console.log('所有编码尝试失败，使用默认读取');
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const content = e.target.result;
+                if (content && content.trim()) {
+                    onSuccess(content, 'default');
+                } else {
+                    importStatus.textContent = 'CSV文件读取失败，无法识别文件编码';
+                    importStatus.style.color = '#e74c3c';
+                }
+            };
+            reader.onerror = () => {
+                importStatus.textContent = 'CSV文件读取失败，文件可能损坏';
+                importStatus.style.color = '#e74c3c';
+            };
+            reader.readAsText(file);
+            return;
+        }
+        
+        const encoding = encodings[currentIndex];
+        console.log(`尝试编码 ${currentIndex + 1}/${encodings.length}: ${encoding}`);
+        
+        const reader = new FileReader();
+        
+        reader.onload = (e) => {
+            const content = e.target.result;
+            
+            // 检查内容是否有效
+            if (content && content.trim() && !containsGarbledText(content)) {
+                console.log(`编码 ${encoding} 读取成功`);
+                onSuccess(content, encoding);
+            } else {
+                console.log(`编码 ${encoding} 读取失败或包含乱码`);
+                currentIndex++;
+                tryNextEncoding();
+            }
+        };
+        
+        reader.onerror = () => {
+            console.log(`编码 ${encoding} 读取出错`);
+            currentIndex++;
+            tryNextEncoding();
+        };
+        
+        try {
+            reader.readAsText(file, encoding);
+        } catch (e) {
+            console.log(`编码 ${encoding} 不支持:`, e.message);
+            currentIndex++;
+            tryNextEncoding();
+        }
+    }
+    
+    tryNextEncoding();
+}
+
+// 检查文本是否包含乱码
+function containsGarbledText(text) {
+    // 检查是否包含大量的问号、方块字符等乱码特征
+    const garbledPatterns = [
+        /\?{3,}/,           // 连续的问号
+        /\ufffd{2,}/,       // 连续的替换字符
+        /[^\x00-\x7F\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]{10,}/, // 大量非常用字符
+    ];
+    
+    return garbledPatterns.some(pattern => pattern.test(text));
+}
+
+// 带调试信息的数据处理
+function processTableImportDataWithDebug(lines, defaultDelimiter) {
+    let importedCount = 0;
+    let skippedCount = 0;
+    let historyCount = 0;
+    
+    console.log('开始处理表格式导入数据，总行数:', lines.length);
+    
+    if (lines.length < 1) {
+        importStatus.textContent = '文件为空或格式不正确';
+        importStatus.style.color = '#e74c3c';
+        return;
+    }
+    
+    // 智能检测分隔符
+    let delimiter = defaultDelimiter;
+    const firstLine = lines[0];
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    const semicolonCount = (firstLine.match(/;/g) || []).length;
+    const tabCount = (firstLine.match(/\t/g) || []).length;
+    
+    if (tabCount > commaCount && tabCount > semicolonCount) {
+        delimiter = '\t';
+    } else if (semicolonCount > commaCount && semicolonCount > tabCount) {
+        delimiter = ';';
+    }
+    
+    console.log('检测到的分隔符:', delimiter === ',' ? '逗号' : delimiter === ';' ? '分号' : '制表符');
+    console.log('分隔符统计 - 逗号:', commaCount, '分号:', semicolonCount, '制表符:', tabCount);
+    
+    // 智能检测列结构
+    const headerColumns = parseCSVLine(firstLine, delimiter);
+    console.log('表头列数:', headerColumns.length);
+    console.log('表头内容:', headerColumns);
+    
+    const columnMapping = detectColumnMapping(headerColumns);
+    console.log('检测到的列映射:', columnMapping);
+    
+    // 验证必要列是否存在
+    if (columnMapping.name === -1 || columnMapping.contact === -1 || columnMapping.phone === -1) {
+        const missingColumns = [];
+        if (columnMapping.name === -1) missingColumns.push('客户名称');
+        if (columnMapping.contact === -1) missingColumns.push('联系人');
+        if (columnMapping.phone === -1) missingColumns.push('电话');
+        
+        importStatus.textContent = `缺少必要列: ${missingColumns.join(', ')}。请检查表头格式。`;
+        importStatus.style.color = '#e74c3c';
+        console.log('列映射验证失败，缺少必要列:', missingColumns);
+        return;
+    }
+    
+    // 从第二行开始处理数据（跳过表头）
+    for (let i = 1; i < lines.length; i++) {
+        const line = lines[i];
+        if (!line.trim()) {
+            console.log(`第${i}行为空，跳过`);
+            continue;
+        }
+        
+        console.log(`处理第${i}行:`, line.substring(0, 100) + (line.length > 100 ? '...' : ''));
+        
+        const columns = parseCSVLine(line, delimiter);
+        console.log(`第${i}行解析结果(${columns.length}列):`, columns);
+        
+        // 验证基本客户信息
+        if (columns.length >= 3 && 
+            columns[columnMapping.name] && columns[columnMapping.name].trim() && 
+            columns[columnMapping.contact] && columns[columnMapping.contact].trim() && 
+            columns[columnMapping.phone] && columns[columnMapping.phone].trim()) {
+            
+            const customerName = columns[columnMapping.name].trim();
+            console.log(`处理客户: ${customerName}`);
+            
+            // 检查客户是否已存在
+            let existingCustomer = customers.find(c => c.name === customerName && c.userId === currentUser.id);
+            
+            if (!existingCustomer) {
+                // 创建新客户
+                const newCustomer = {
+                    id: Date.now() + i * 1000 + Math.random() * 1000,
+                    name: customerName,
+                    contactPerson: columns[columnMapping.contact] ? columns[columnMapping.contact].trim() : '',
+                    phoneNumber: formatPhoneNumber(columns[columnMapping.phone]),
+                    region: columnMapping.region !== -1 ? (columns[columnMapping.region] ? columns[columnMapping.region].trim() : '') : '',
+                    filterPurchaseDate: columnMapping.purchaseDate !== -1 ? (columns[columnMapping.purchaseDate] || new Date().toISOString().split('T')[0]) : new Date().toISOString().split('T')[0],
+                    customInterval: columnMapping.interval !== -1 ? (columns[columnMapping.interval] ? parseInt(columns[columnMapping.interval]) : null) : null,
+                    notes: columnMapping.notes !== -1 ? (columns[columnMapping.notes] ? columns[columnMapping.notes].trim() : '') : '',
+                    userId: currentUser.id,
+                    createdAt: new Date().toISOString(),
+                    replacementHistory: []
+                };
+                
+                customers.push(newCustomer);
+                existingCustomer = newCustomer;
+                console.log('创建新客户:', customerName);
+                importedCount++;
+            } else {
+                // 更新现有客户基本信息
+                existingCustomer.contactPerson = columns[columnMapping.contact] ? columns[columnMapping.contact].trim() : existingCustomer.contactPerson;
+                existingCustomer.phoneNumber = formatPhoneNumber(columns[columnMapping.phone]);
+                if (columnMapping.region !== -1 && columns[columnMapping.region]) {
+                    existingCustomer.region = columns[columnMapping.region].trim();
+                }
+                if (columnMapping.notes !== -1 && columns[columnMapping.notes]) {
+                    existingCustomer.notes = columns[columnMapping.notes].trim();
+                }
+                console.log('更新现有客户:', customerName);
+            }
+            
+            // 处理历史记录
+            const historyRecords = extractHistoryRecords(columns, columnMapping, existingCustomer);
+            historyRecords.forEach(record => {
+                const existingRecord = existingCustomer.replacementHistory.find(r => 
+                    r.date === record.date && r.filterModel === record.filterModel
+                );
+                
+                if (!existingRecord) {
+                    existingCustomer.replacementHistory.push(record);
+                    historyCount++;
+                    console.log('添加历史记录:', record.date, record.filterModel);
+                }
+            });
+            
+            // 确保至少有一条初始记录
+            if (existingCustomer.replacementHistory.length === 0) {
+                const initialRecord = {
+                    id: Date.now() + i * 1000,
+                    date: existingCustomer.filterPurchaseDate,
+                    filterModel: '标准滤芯',
+                    quantity: 1,
+                    cost: 0,
+                    notes: '初始购买记录',
+                    operator: currentUser.username,
+                    timestamp: new Date().toISOString()
+                };
+                existingCustomer.replacementHistory.push(initialRecord);
+                console.log('创建初始购买记录');
+            }
+            
+        } else {
+            console.log(`第${i}行客户信息不完整，跳过:`, {
+                name: columns[columnMapping.name],
+                contact: columns[columnMapping.contact],
+                phone: columns[columnMapping.phone],
+                columnsLength: columns.length
+            });
+            skippedCount++;
+        }
+    }
+    
+    saveCustomersToStorage();
+    renderReminderList();
+    
+    let statusMessage = `导入完成: 成功导入 ${importedCount} 个客户`;
+    if (historyCount > 0) {
+        statusMessage += `，${historyCount} 条历史记录`;
+    }
+    statusMessage += `，跳过 ${skippedCount} 条无效记录`;
+    
+    importStatus.textContent = statusMessage;
+    importStatus.style.color = importedCount > 0 ? '#27ae60' : '#e74c3c';
+    
+    console.log('导入完成:', statusMessage);
+    csvFile.value = '';
+}
+
+// 导入CSV数据 - 优化版本，解决Mac/Windows兼容性问题
 function importCSV(file) {
     const reader = new FileReader();
     
     reader.onload = (e) => {
         const content = e.target.result;
         let cleanContent = content;
+        
+        // 移除BOM标记
         if (cleanContent.charCodeAt(0) === 0xFEFF) {
             cleanContent = cleanContent.slice(1);
         }
         
+        // 统一行结束符 - Windows使用\r\n，Mac使用\n，老Mac使用\r
+        cleanContent = cleanContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        
         const lines = cleanContent.split('\n').filter(line => line.trim() !== '');
+        
+        if (lines.length === 0) {
+            importStatus.textContent = 'CSV文件为空或格式不正确';
+            importStatus.style.color = '#e74c3c';
+            return;
+        }
+        
         processTableImportData(lines, ',');
     };
     
@@ -763,15 +1232,84 @@ function importCSV(file) {
         importStatus.style.color = '#e74c3c';
     };
     
-    try {
-        reader.readAsText(file, 'UTF-8');
-    } catch (e) {
+    // 智能编码检测和读取
+    detectFileEncodingAndRead(file, reader);
+}
+
+// 检测文件编码并读取
+function detectFileEncodingAndRead(file, reader) {
+    // 首先尝试UTF-8编码
+    reader.readAsText(file, 'UTF-8');
+    
+    // 如果UTF-8失败，创建新的FileReader尝试其他编码
+    reader.addEventListener('error', () => {
+        console.log('UTF-8读取失败，尝试其他编码');
+        
+        const reader2 = new FileReader();
+        reader2.onload = (e) => {
+            const content = e.target.result;
+            let cleanContent = content;
+            
+            // 移除BOM标记
+            if (cleanContent.charCodeAt(0) === 0xFEFF) {
+                cleanContent = cleanContent.slice(1);
+            }
+            
+            // 统一行结束符
+            cleanContent = cleanContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+            
+            const lines = cleanContent.split('\n').filter(line => line.trim() !== '');
+            
+            if (lines.length === 0) {
+                importStatus.textContent = 'CSV文件为空或格式不正确';
+                importStatus.style.color = '#e74c3c';
+                return;
+            }
+            
+            processTableImportData(lines, ',');
+        };
+        
+        reader2.onerror = () => {
+            // 最后尝试默认编码
+            const reader3 = new FileReader();
+            reader3.onload = (e) => {
+                const content = e.target.result;
+                let cleanContent = content;
+                
+                if (cleanContent.charCodeAt(0) === 0xFEFF) {
+                    cleanContent = cleanContent.slice(1);
+                }
+                
+                cleanContent = cleanContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+                const lines = cleanContent.split('\n').filter(line => line.trim() !== '');
+                
+                if (lines.length > 0) {
+                    processTableImportData(lines, ',');
+                } else {
+                    importStatus.textContent = 'CSV文件读取失败，请检查文件格式和编码';
+                    importStatus.style.color = '#e74c3c';
+                }
+            };
+            
+            reader3.onerror = () => {
+                importStatus.textContent = 'CSV文件读取失败，请检查文件格式';
+                importStatus.style.color = '#e74c3c';
+            };
+            
+            reader3.readAsText(file); // 使用默认编码
+        };
+        
+        // Windows常用的GBK/GB2312编码
         try {
-            reader.readAsText(file, 'GBK');
-        } catch (e2) {
-            reader.readAsText(file);
+            reader2.readAsText(file, 'GBK');
+        } catch (e) {
+            try {
+                reader2.readAsText(file, 'GB2312');
+            } catch (e2) {
+                reader2.readAsText(file, 'ISO-8859-1');
+            }
         }
-    }
+    }, { once: true });
 }
 
 // Excel日期转换函数
