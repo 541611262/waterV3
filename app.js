@@ -1841,33 +1841,29 @@ function exportCSV() {
     document.body.removeChild(link);
 }
 
-// 计算提醒日期范围
-function calculateReminderRange(filterDate, customInterval = null) {
+// 计算建议更换日期（单一日期）
+function calculateReplacementDate(filterDate, customInterval = null) {
     const date = new Date(filterDate);
     
     if (customInterval && !isNaN(customInterval)) {
-        const minDate = new Date(date);
-        minDate.setDate(minDate.getDate() + customInterval);
-        
-        const maxDate = new Date(date);
-        maxDate.setDate(maxDate.getDate() + customInterval * 2);
-        
-        return {
-            min: formatDate(minDate),
-            max: formatDate(maxDate)
-        };
+        const replacementDate = new Date(date);
+        replacementDate.setDate(replacementDate.getDate() + customInterval);
+        return formatDate(replacementDate);
     } else {
-        const minDate = new Date(date);
-        minDate.setDate(minDate.getDate() + 60);
-        
-        const maxDate = new Date(date);
-        maxDate.setDate(maxDate.getDate() + 120);
-        
-        return {
-            min: formatDate(minDate),
-            max: formatDate(maxDate)
-        };
+        // 默认使用90天间隔
+        const replacementDate = new Date(date);
+        replacementDate.setDate(replacementDate.getDate() + 90);
+        return formatDate(replacementDate);
     }
+}
+
+// 为了兼容性，保留原函数但改为调用新函数
+function calculateReminderRange(filterDate, customInterval = null) {
+    const replacementDate = calculateReplacementDate(filterDate, customInterval);
+    return {
+        min: replacementDate,
+        max: replacementDate
+    };
 }
 
 // 格式化日期为YYYY-MM-DD
@@ -1951,38 +1947,25 @@ function renderReminderList() {
     const selectedMonth = followupMonthFilter ? followupMonthFilter.value : '';
     if (selectedMonth) {
         searchFilteredCustomers = searchFilteredCustomers.filter(customer => {
-            const reminderRange = calculateReminderRange(customer.filterPurchaseDate, customer.customInterval);
-            const minDate = new Date(reminderRange.min);
+            const replacementDate = calculateReplacementDate(customer.filterPurchaseDate, customer.customInterval);
+            const date = new Date(replacementDate);
             const month = parseInt(selectedMonth);
             
-            // 按照建议更换时间的开始日期（前面那个日期）的月份来筛选
-            return minDate.getMonth() + 1 === month;
+            // 按照建议更换时间的月份来筛选
+            return date.getMonth() + 1 === month;
         });
     }
     
     const showAll = showAllCheckbox ? showAllCheckbox.checked : false;
     let filteredCustomers = searchFilteredCustomers;
     
+    // 按照建议更换时间从新到旧排序（日期越新越靠前）
     filteredCustomers.sort((a, b) => {
-        const today = new Date();
-        const aRange = calculateReminderRange(a.filterPurchaseDate, a.customInterval);
-        const bRange = calculateReminderRange(b.filterPurchaseDate, b.customInterval);
-        const aMinDate = new Date(aRange.min);
-        const bMinDate = new Date(bRange.min);
-        const aMaxDate = new Date(aRange.max);
-        const bMaxDate = new Date(bRange.max);
+        const aReplacementDate = calculateReplacementDate(a.filterPurchaseDate, a.customInterval);
+        const bReplacementDate = calculateReplacementDate(b.filterPurchaseDate, b.customInterval);
         
-        const aInPeriod = today >= aMinDate && today <= aMaxDate;
-        const bInPeriod = today >= bMinDate && today <= bMaxDate;
-        
-        if (aInPeriod && !bInPeriod) return -1;
-        if (!aInPeriod && bInPeriod) return 1;
-        
-        if (aInPeriod && bInPeriod) {
-            return aMinDate - bMinDate;
-        }
-        
-        return aMinDate - bMinDate;
+        // 转换为Date对象进行比较，新日期在前（降序）
+        return new Date(bReplacementDate) - new Date(aReplacementDate);
     });
     
     if (!showAll) {
@@ -2037,7 +2020,7 @@ function renderReminderList() {
                 <p><strong>电话:</strong> ${customer.phoneNumber}</p>
                 <p><strong>区域:</strong> ${customer.region || '未设置'}</p>
                 <p><strong>滤芯购买日期:</strong> ${customer.filterPurchaseDate}</p>
-                <p><strong>建议更换时间:</strong> ${reminderRange.min} - ${reminderRange.max}</p>
+                <p><strong>建议更换时间:</strong> ${reminderRange.min}</p>
                 <p><strong>自定义间隔:</strong> ${customer.customInterval ? customer.customInterval + '天' : '默认(60-120天)'}</p>
                 <p><strong>备注:</strong> ${customer.notes || '无'}</p>
                 <div class="history-summary" style="background-color: #f8f9fa; padding: 10px; margin-top: 10px; border-radius: 4px; border-left: 4px solid #9b59b6;">
