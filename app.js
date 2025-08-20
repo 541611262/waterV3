@@ -1721,7 +1721,25 @@ function extractHistoryRecords(columns, mapping, customer) {
 // 解析单条历史记录条目
 function parseHistoryEntry(entry, customer, index) {
     try {
-        // 尝试解析逗号分隔的历史记录格式：日期,型号,数量,费用,备注,操作人
+        // 尝试解析管道符分隔的历史记录格式：日期|型号|数量|费用|操作人|备注
+        if (entry.includes('|')) {
+            const fields = entry.split('|').map(field => field.trim());
+            
+            if (fields.length >= 1 && isValidDate(fields[0])) {
+                return {
+                    id: Date.now() + index * 100 + Math.random() * 100,
+                    date: fields[0],
+                    filterModel: fields[1] || '标准滤芯',
+                    quantity: fields[2] ? parseInt(fields[2]) || 1 : 1,
+                    cost: fields[3] ? parseFloat(fields[3]) || 0 : 0,
+                    operator: fields[4] || currentUser.username,
+                    notes: fields[5] || '导入的历史记录',
+                    timestamp: new Date().toISOString()
+                };
+            }
+        }
+        
+        // 兼容旧格式：尝试解析逗号分隔的历史记录格式：日期,型号,数量,费用,备注,操作人
         const fields = entry.split(',').map(field => field.trim());
         
         if (fields.length >= 1 && isValidDate(fields[0])) {
@@ -1793,26 +1811,26 @@ function isValidDate(dateString) {
     return year >= 2000 && year <= 2030;
 }
 
-// 下载示例CSV（表格式格式）
+// 下载示例CSV（表格式格式）- 与导出格式保持一致
 function downloadSampleCSV(e) {
     e.preventDefault();
-    const csvContent = '\uFEFF客户名称,联系人,电话,区域,滤芯购买日期,间隔天数,备注,历史记录1,历史记录2,历史记录3\n' +
-        '张三,张经理,13800138000,华北,2025-01-15,90,重要客户,"2024-12-01,标准滤芯,1,100,定期更换,admin","2024-09-01,活性炭滤芯,1,120,紧急更换,admin","2024-06-01,高效滤芯,1,150,升级更换,admin"\n' +
-        '李四,李主任,13900139000,华东,2025-02-20,60,普通客户,"2024-11-15,标准滤芯,1,100,上次更换,admin","2024-08-10,标准滤芯,1,100,定期维护,admin",\n' +
-        '王五,王师傅,13700137000,华南,2025-03-15,120,VIP客户,"2024-10-01,高效滤芯,2,300,批量更换,admin",,';
+    const csvContent = '\uFEFF客户名称,联系人,联系电话,区域,滤芯购买日期,自定义间隔(天),备注,历史记录详情\n' +
+        '张三,张经理,13800138000,华北,2025-01-15,90,重要客户,"2024-12-01|标准滤芯|1|100|admin|定期更换;2024-09-01|活性炭滤芯|1|120|admin|紧急更换;2024-06-01|高效滤芯|1|150|admin|升级更换"\n' +
+        '李四,李主任,13900139000,华东,2025-02-20,60,普通客户,"2024-11-15|标准滤芯|1|100|admin|上次更换;2024-08-10|标准滤芯|1|100|admin|定期维护"\n' +
+        '王五,王师傅,13700137000,华南,2025-03-15,120,VIP客户,"2024-10-01|高效滤芯|2|300|admin|批量更换"';
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', '客户数据示例_表格式V3.csv');
+    link.setAttribute('download', '客户数据示例_兼容导入导出V3.csv');
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 }
 
-// 导出客户数据（包含历史记录）
+// 导出客户数据（兼容导入格式）
 function exportCSV() {
     const userCustomers = getCurrentUserCustomers();
     
@@ -1821,22 +1839,17 @@ function exportCSV() {
         return;
     }
     
-    // 创建包含历史记录的完整导出格式
-    let csvContent = '\uFEFF客户名称,联系人,联系电话,区域,滤芯购买日期,自定义间隔(天),备注,历史记录总数,最新更换日期,建议更换日期,历史记录详情\n';
+    // 创建与导入格式兼容的导出格式
+    let csvContent = '\uFEFF客户名称,联系人,联系电话,区域,滤芯购买日期,自定义间隔(天),备注,历史记录详情\n';
     
     userCustomers.forEach(customer => {
         const customInterval = customer.customInterval || '';
         const history = customer.replacementHistory || [];
-        const historyCount = history.length;
         
-        // 获取最新更换日期和建议更换日期
-        const latestDate = getLatestReplacementDate(customer);
-        const suggestedDate = calculateReplacementDate(latestDate, customer.customInterval);
-        
-        // 将历史记录格式化为详细字符串
+        // 将历史记录格式化为详细字符串（与导入格式一致）
         const historyDetails = formatHistoryForExport(history);
         
-        csvContent += `"${customer.name}","${customer.contactPerson}","${customer.phoneNumber}","${customer.region || ''}","${customer.filterPurchaseDate}","${customInterval}","${customer.notes || ''}","${historyCount}","${latestDate}","${suggestedDate}","${historyDetails}"\n`;
+        csvContent += `"${customer.name}","${customer.contactPerson}","${customer.phoneNumber}","${customer.region || ''}","${customer.filterPurchaseDate}","${customInterval}","${customer.notes || ''}","${historyDetails}"\n`;
     });
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -1845,13 +1858,13 @@ function exportCSV() {
     const date = new Date().toISOString().split('T')[0];
     
     link.setAttribute('href', url);
-    link.setAttribute('download', `滤芯客户完整数据_V3_${date}.csv`);
+    link.setAttribute('download', `滤芯客户数据_兼容导入_V3_${date}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     
-    alert(`导出完成！已导出 ${userCustomers.length} 个客户的完整数据（包含历史记录）`);
+    alert(`导出完成！已导出 ${userCustomers.length} 个客户的数据，格式兼容重新导入`);
 }
 
 // 导出详细历史记录表（每条历史记录一行）
