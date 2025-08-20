@@ -1866,6 +1866,17 @@ function calculateReminderRange(filterDate, customInterval = null) {
     };
 }
 
+// 获取客户最新的更换日期
+function getLatestReplacementDate(customer) {
+    if (!customer.replacementHistory || customer.replacementHistory.length === 0) {
+        return customer.filterPurchaseDate;
+    }
+    
+    // 按日期排序，获取最新的记录
+    const sortedHistory = customer.replacementHistory.sort((a, b) => new Date(b.date) - new Date(a.date));
+    return sortedHistory[0].date;
+}
+
 // 格式化日期为YYYY-MM-DD
 function formatDate(date) {
     const year = date.getFullYear();
@@ -1961,8 +1972,10 @@ function renderReminderList() {
     
     // 按照建议更换时间从新到旧排序（日期越新越靠前）
     filteredCustomers.sort((a, b) => {
-        const aReplacementDate = calculateReplacementDate(a.filterPurchaseDate, a.customInterval);
-        const bReplacementDate = calculateReplacementDate(b.filterPurchaseDate, b.customInterval);
+        const aLatestDate = getLatestReplacementDate(a);
+        const bLatestDate = getLatestReplacementDate(b);
+        const aReplacementDate = calculateReplacementDate(aLatestDate, a.customInterval);
+        const bReplacementDate = calculateReplacementDate(bLatestDate, b.customInterval);
         
         // 转换为Date对象进行比较，新日期在前（降序）
         return new Date(bReplacementDate) - new Date(aReplacementDate);
@@ -1970,12 +1983,13 @@ function renderReminderList() {
     
     if (!showAll) {
         filteredCustomers = filteredCustomers.filter(customer => {
-            const reminderRange = calculateReminderRange(customer.filterPurchaseDate, customer.customInterval);
+            const latestReplacementDate = getLatestReplacementDate(customer);
+            const replacementDate = calculateReplacementDate(latestReplacementDate, customer.customInterval);
             const today = new Date();
-            const minReminderDate = new Date(reminderRange.min);
-            const maxReminderDate = new Date(reminderRange.max);
+            const targetDate = new Date(replacementDate);
             
-            return today >= minReminderDate && today <= maxReminderDate;
+            // 显示已到期或过期的客户（今天>=建议更换日期）
+            return today >= targetDate;
         });
     }
     
@@ -2546,8 +2560,7 @@ function saveReplacementRecord() {
     // 添加记录到历史
     customer.replacementHistory.push(newRecord);
     
-    // 更新客户的滤芯购买日期为最新更换日期
-    customer.filterPurchaseDate = date;
+    // 不再直接更新filterPurchaseDate，而是通过getLatestReplacementDate获取最新日期
     
     // 保存数据
     saveCustomersToStorage();
