@@ -1812,7 +1812,7 @@ function downloadSampleCSV(e) {
     document.body.removeChild(link);
 }
 
-// 导出客户数据
+// 导出客户数据（包含历史记录）
 function exportCSV() {
     const userCustomers = getCurrentUserCustomers();
     
@@ -1821,11 +1821,22 @@ function exportCSV() {
         return;
     }
     
-    let csvContent = '\uFEFF客户名称,联系人,联系电话,区域,滤芯购买日期,自定义间隔(天),备注\n';
+    // 创建包含历史记录的完整导出格式
+    let csvContent = '\uFEFF客户名称,联系人,联系电话,区域,滤芯购买日期,自定义间隔(天),备注,历史记录总数,最新更换日期,建议更换日期,历史记录详情\n';
     
     userCustomers.forEach(customer => {
         const customInterval = customer.customInterval || '';
-        csvContent += `${customer.name},${customer.contactPerson},${customer.phoneNumber},${customer.region || ''},${customer.filterPurchaseDate},${customInterval},${customer.notes || ''}\n`;
+        const history = customer.replacementHistory || [];
+        const historyCount = history.length;
+        
+        // 获取最新更换日期和建议更换日期
+        const latestDate = getLatestReplacementDate(customer);
+        const suggestedDate = calculateReplacementDate(latestDate, customer.customInterval);
+        
+        // 将历史记录格式化为详细字符串
+        const historyDetails = formatHistoryForExport(history);
+        
+        csvContent += `"${customer.name}","${customer.contactPerson}","${customer.phoneNumber}","${customer.region || ''}","${customer.filterPurchaseDate}","${customInterval}","${customer.notes || ''}","${historyCount}","${latestDate}","${suggestedDate}","${historyDetails}"\n`;
     });
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -1834,11 +1845,58 @@ function exportCSV() {
     const date = new Date().toISOString().split('T')[0];
     
     link.setAttribute('href', url);
-    link.setAttribute('download', `滤芯客户数据_V3_${date}.csv`);
+    link.setAttribute('download', `滤芯客户完整数据_V3_${date}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    
+    alert(`导出完成！已导出 ${userCustomers.length} 个客户的完整数据（包含历史记录）`);
+}
+
+// 导出详细历史记录表（每条历史记录一行）
+function exportDetailedHistory() {
+    const userCustomers = getCurrentUserCustomers();
+    
+    if (userCustomers.length === 0) {
+        alert('没有客户数据可导出');
+        return;
+    }
+    
+    // 创建详细历史记录表头
+    let csvContent = '\uFEFF客户名称,联系人,联系电话,区域,更换日期,滤芯型号,数量,费用(元),操作人,备注,记录时间\n';
+    let totalRecords = 0;
+    
+    userCustomers.forEach(customer => {
+        const history = customer.replacementHistory || [];
+        
+        if (history.length === 0) {
+            // 如果没有历史记录，至少导出客户基本信息
+            csvContent += `"${customer.name}","${customer.contactPerson}","${customer.phoneNumber}","${customer.region || ''}","","","","","","无历史记录",""\n`;
+        } else {
+            // 按日期排序（最新的在前）
+            const sortedHistory = history.sort((a, b) => new Date(b.date) - new Date(a.date));
+            
+            sortedHistory.forEach(record => {
+                csvContent += `"${customer.name}","${customer.contactPerson}","${customer.phoneNumber}","${customer.region || ''}","${record.date}","${record.filterModel || '标准滤芯'}","${record.quantity || 1}","${record.cost || 0}","${record.operator || '未知'}","${record.notes || '无'}","${record.timestamp ? new Date(record.timestamp).toLocaleString() : '未知'}"\n`;
+                totalRecords++;
+            });
+        }
+    });
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const date = new Date().toISOString().split('T')[0];
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `滤芯客户历史记录详情_V3_${date}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    alert(`详细历史记录导出完成！已导出 ${userCustomers.length} 个客户的 ${totalRecords} 条历史记录`);
 }
 
 // 计算建议更换日期（单一日期）
@@ -1875,6 +1933,24 @@ function getLatestReplacementDate(customer) {
     // 按日期排序，获取最新的记录
     const sortedHistory = customer.replacementHistory.sort((a, b) => new Date(b.date) - new Date(a.date));
     return sortedHistory[0].date;
+}
+
+// 格式化历史记录用于导出
+function formatHistoryForExport(history) {
+    if (!history || history.length === 0) {
+        return '无历史记录';
+    }
+    
+    // 按日期排序（最新的在前）
+    const sortedHistory = history.sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    // 格式化每条记录：日期|型号|数量|费用|操作人|备注
+    const formattedRecords = sortedHistory.map(record => {
+        return `${record.date}|${record.filterModel || '标准滤芯'}|${record.quantity || 1}|${record.cost || 0}|${record.operator || '未知'}|${record.notes || '无'}`;
+    });
+    
+    // 用分号分隔多条记录
+    return formattedRecords.join(';');
 }
 
 // 格式化日期为YYYY-MM-DD
