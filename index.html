@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>滤芯更换提醒系统 V3</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- 登录界面 -->
+        <div id="loginSection" class="auth-section">
+            <div class="auth-form">
+                <h2>滤芯更换提醒系统 V3</h2>
+                <form>
+                    <div class="form-group">
+                        <label for="loginUsername">用户名:</label>
+                        <input type="text" id="loginUsername" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">密码:</label>
+                        <input type="password" id="loginPassword" required>
+                    </div>
+                    <button type="submit" id="loginBtn">登录</button>
+                    <div id="loginError" class="error-message"></div>
+                </form>
+                <p><a href="#" id="showRegisterLink">注册新账户</a> | <a href="#" id="showRecoveryLink">忘记密码？</a></p>
+            </div>
+        </div>
+
+        <!-- 注册界面 -->
+        <div id="registerSection" class="auth-section" style="display: none;">
+            <div class="auth-form">
+                <h2>注册新账户</h2>
+                <form>
+                    <div class="form-group">
+                        <label for="registerUsername">用户名:</label>
+                        <input type="text" id="registerUsername" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="registerPassword">密码:</label>
+                        <input type="password" id="registerPassword" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirmPassword">确认密码:</label>
+                        <input type="password" id="confirmPassword" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="securityQuestion">安全问题:</label>
+                        <input type="text" id="securityQuestion" placeholder="例如：您的出生地是？" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="securityAnswer">安全问题答案:</label>
+                        <input type="text" id="securityAnswer" required>
+                    </div>
+                    <button type="submit" id="registerBtn">注册</button>
+                    <div id="registerError" class="error-message"></div>
+                </form>
+                <p><a href="#" id="showLoginLink">返回登录</a></p>
+            </div>
+        </div>
+
+        <!-- 密码恢复界面 -->
+        <div id="recoverySection" class="auth-section" style="display: none;">
+            <div class="auth-form">
+                <h2>密码恢复</h2>
+                <form>
+                    <div class="form-group">
+                        <label for="recoveryUsername">用户名:</label>
+                        <input type="text" id="recoveryUsername" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="recoverySecurityAnswer">安全问题答案:</label>
+                        <input type="text" id="recoverySecurityAnswer" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="newRecoveryPassword">新密码:</label>
+                        <input type="password" id="newRecoveryPassword" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirmRecoveryPassword">确认新密码:</label>
+                        <input type="password" id="confirmRecoveryPassword" required>
+                    </div>
+                    <button type="submit" id="recoveryBtn">恢复密码</button>
+                    <div id="recoveryError" class="error-message"></div>
+                </form>
+                <p><a href="#" id="backToLoginLink">返回登录</a></p>
+            </div>
+        </div>
+
+        <!-- 管理员用户管理界面 -->
+        <div id="adminUserManagement" class="admin-section" style="display: none;">
+            <div class="admin-header">
+                <h2>用户管理</h2>
+                <a href="#" id="backToMainAppLink">返回主应用</a>
+            </div>
+            <div id="userList" class="user-list">
+                <!-- 用户列表将在这里动态生成 -->
+            </div>
+        </div>
+
+        <!-- 主应用界面 -->
+        <div id="mainApp" style="display: none;">
+            <div class="header">
+                <h1>滤芯更换提醒系统 V3</h1>
+                <div class="user-info">
+                    <span>欢迎, <span id="currentUsername"></span> (<span id="currentUserRole"></span>)</span>
+                    <div class="user-actions">
+                        <div class="notification-center">
+                            <button id="notificationBtn" class="notification-btn">
+                                🔔
+                                <span id="notificationBadge" class="notification-badge" style="display: none;">0</span>
+                            </button>
+                            <div id="notificationDropdown" class="notification-dropdown" style="display: none;">
+                                <div class="notification-header">
+                                    <h4>通知中心</h4>
+                                    <button id="markAllReadBtn" class="mark-all-read">全部已读</button>
+                                </div>
+                                <div id="notificationList" class="notification-list">
+                                    <!-- 通知列表将在这里动态生成 -->
+                                </div>
+                            </div>
+                        </div>
+                        <button id="changePasswordBtn">修改密码</button>
+                        <button id="logoutBtn">退出登录</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Dashboard Section -->
+            <div id="dashboardSection" class="dashboard-section">
+                <h2>📊 客户提醒仪表板</h2>
+                <div class="dashboard-grid">
+                    <div class="dashboard-card urgent">
+                        <div class="card-header">
+                            <h3>🚨 今日到期</h3>
+                            <span id="todayCount" class="count">0</span>
+                        </div>
+                        <div id="todayList" class="customer-list"></div>
+                        <button id="exportTodayBtn" class="export-btn">导出今日列表</button>
+                    </div>
+                    
+                    <div class="dashboard-card warning">
+                        <div class="card-header">
+                            <h3>⚠️ 本周到期</h3>
+                            <span id="thisWeekCount" class="count">0</span>
+                        </div>
+                        <div id="thisWeekList" class="customer-list"></div>
+                        <button id="exportWeekBtn" class="export-btn">导出本周列表</button>
+                    </div>
+                    
+                    <div class="dashboard-card info">
+                        <div class="card-header">
+                            <h3>📅 本月到期</h3>
+                            <span id="thisMonthCount" class="count">0</span>
+                        </div>
+                        <div id="thisMonthList" class="customer-list"></div>
+                        <button id="exportMonthBtn" class="export-btn">导出本月列表</button>
+                    </div>
+                    
+                    <div class="dashboard-card next">
+                        <div class="card-header">
+                            <h3>📈 下月到期</h3>
+                            <span id="nextMonthCount" class="count">0</span>
+                        </div>
+                        <div id="nextMonthList" class="customer-list"></div>
+                        <button id="exportNextMonthBtn" class="export-btn">导出下月列表</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="input-section">
+                <h2>添加新客户</h2>
+                <form id="customerForm">
+                    <div class="form-group">
+                        <label for="customerName">客户名称:</label>
+                        <input type="text" id="customerName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="contactPerson">联系人:</label>
+                        <input type="text" id="contactPerson" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="phoneNumber">联系电话:</label>
+                        <input type="tel" id="phoneNumber" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="region">区域:</label>
+                        <input type="text" id="region">
+                    </div>
+                    <div class="form-group">
+                        <label for="filterPurchaseDate">上次滤芯购买日期:</label>
+                        <input type="date" id="filterPurchaseDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="customInterval">自定义间隔(天):</label>
+                        <input type="number" id="customInterval" placeholder="留空使用默认间隔">
+                    </div>
+                    <div class="form-group">
+                        <label for="notes">备注:</label>
+                        <textarea id="notes" rows="3"></textarea>
+                    </div>
+                    <button type="button" id="addCustomer">添加客户</button>
+                </form>
+            </div>
+
+            <div class="filter-section">
+                <h2>客户管理</h2>
+                <div class="filter-controls">
+                    <div class="filter-group">
+                        <label for="customerSearch">搜索客户:</label>
+                        <input type="text" id="customerSearch" placeholder="输入客户名称、联系人或电话">
+                    </div>
+                    <div class="filter-group">
+                        <label for="regionFilter">区域筛选:</label>
+                        <select id="regionFilter">
+                            <option value="">全部区域</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="followupMonthFilter">跟进月份:</label>
+                        <select id="followupMonthFilter">
+                            <option value="">全部月份</option>
+                            <option value="1">1月</option>
+                            <option value="2">2月</option>
+                            <option value="3">3月</option>
+                            <option value="4">4月</option>
+                            <option value="5">5月</option>
+                            <option value="6">6月</option>
+                            <option value="7">7月</option>
+                            <option value="8">8月</option>
+                            <option value="9">9月</option>
+                            <option value="10">10月</option>
+                            <option value="11">11月</option>
+                            <option value="12">12月</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="sortOrder">排序方式:</label>
+                        <select id="sortOrder">
+                            <option value="desc">从新到旧</option>
+                            <option value="asc">从旧到新</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>
+                            <input type="checkbox" id="showAll"> 显示所有客户
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="import-export-section">
+                <h3>数据导入导出</h3>
+                <div class="import-export-controls">
+                    <div class="import-group">
+                        <input type="file" id="csvFile" accept=".csv,.xlsx,.xls">
+                        <button id="importBtn">导入数据</button>
+                        <button id="downloadSample">下载示例文件</button>
+                    </div>
+                    <div class="export-group">
+                        <button id="exportBtn">导出客户数据</button>
+                    </div>
+                </div>
+                <div id="importStatus" class="status-message"></div>
+            </div>
+
+            <div id="reminderList" class="reminder-list">
+                <!-- 客户列表将在这里动态生成 -->
+            </div>
+        </div>
+
+        <!-- 修改密码模态框 -->
+        <div id="changePasswordModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h2>修改密码</h2>
+                <form>
+                    <div class="form-group">
+                        <label for="currentPassword">当前密码:</label>
+                        <input type="password" id="currentPassword" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="newPassword">新密码:</label>
+                        <input type="password" id="newPassword" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirmNewPassword">确认新密码:</label>
+                        <input type="password" id="confirmNewPassword" required>
+                    </div>
+                    <button type="button" id="savePasswordBtn">保存</button>
+                    <div id="changePasswordError" class="error-message"></div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 编辑客户模态框 -->
+        <div id="editCustomerModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <span class="close-edit">&times;</span>
+                <h2>编辑客户信息</h2>
+                <form>
+                    <div class="form-group">
+                        <label for="editCustomerName">客户名称:</label>
+                        <input type="text" id="editCustomerName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editContactPerson">联系人:</label>
+                        <input type="text" id="editContactPerson" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editPhoneNumber">联系电话:</label>
+                        <input type="tel" id="editPhoneNumber" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editRegion">区域:</label>
+                        <input type="text" id="editRegion">
+                    </div>
+                    <div class="form-group">
+                        <label for="editFilterPurchaseDate">上次滤芯购买日期:</label>
+                        <input type="date" id="editFilterPurchaseDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editCustomInterval">自定义间隔(天):</label>
+                        <input type="number" id="editCustomInterval" placeholder="留空使用默认间隔">
+                    </div>
+                    <div class="form-group">
+                        <label for="editNotes">备注:</label>
+                        <textarea id="editNotes" rows="3"></textarea>
+                    </div>
+                    <button type="button" id="saveCustomerBtn">保存</button>
+                    <div id="editCustomerError" class="error-message"></div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 历史记录管理模态框 -->
+        <div id="historyManagementModal" class="modal" style="display: none;">
+            <div class="modal-content large-modal">
+                <span class="close-history">&times;</span>
+                <h2 id="historyModalTitle">历史记录管理</h2>
+                <div id="historyList" class="history-list">
+                    <!-- 历史记录列表将在这里动态生成 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 添加更换记录模态框 -->
+        <div id="addReplacementModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <span class="close-replacement">&times;</span>
+                <h2>添加更换记录</h2>
+                <form>
+                    <div class="form-group">
+                        <label for="replacementDate">更换日期:</label>
+                        <input type="date" id="replacementDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="replacementFilterModel">滤芯型号:</label>
+                        <input type="text" id="replacementFilterModel" value="标准滤芯" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="replacementQuantity">数量:</label>
+                        <input type="number" id="replacementQuantity" value="1" min="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="replacementCost">费用(元):</label>
+                        <input type="number" id="replacementCost" step="0.01" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="replacementNotes">备注:</label>
+                        <textarea id="replacementNotes" rows="3"></textarea>
+                    </div>
+                    <button type="button" id="saveReplacementBtn">保存记录</button>
+                    <div id="replacementError" class="error-message"></div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 编辑历史记录模态框 -->
+        <div id="editHistoryModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <span class="close-edit-history">&times;</span>
+                <h2>编辑历史记录</h2>
+                <form>
+                    <div class="form-group">
+                        <label for="editHistoryDate">更换日期:</label>
+                        <input type="date" id="editHistoryDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editHistoryFilterModel">滤芯型号:</label>
+                        <input type="text" id="editHistoryFilterModel" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editHistoryQuantity">数量:</label>
+                        <input type="number" id="editHistoryQuantity" min="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editHistoryCost">费用(元):</label>
+                        <input type="number" id="editHistoryCost" step="0.01" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="editHistoryNotes">备注:</label>
+                        <textarea id="editHistoryNotes" rows="3"></textarea>
+                    </div>
+                    <button type="button" id="saveEditHistoryBtn">保存修改</button>
+                    <div id="editHistoryError" class="error-message"></div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Login Reminder Modal -->
+        <div id="loginReminderModal" class="modal reminder-modal" style="display: none;">
+            <div class="modal-content reminder-content">
+                <div class="reminder-header">
+                    <h2>🔔 今日提醒</h2>
+                    <span class="close-reminder">&times;</span>
+                </div>
+                <div class="reminder-body">
+                    <div id="urgentReminders" class="urgent-section">
+                        <h3>🚨 紧急提醒</h3>
+                        <div id="urgentList" class="reminder-customer-list">
+                            <!-- 紧急提醒列表 -->
+                        </div>
+                    </div>
+                    <div id="todayReminders" class="today-section">
+                        <h3>📅 今日到期</h3>
+                        <div id="todayReminderList" class="reminder-customer-list">
+                            <!-- 今日到期列表 -->
+                        </div>
+                    </div>
+                    <div id="weekReminders" class="week-section">
+                        <h3>📊 本周概览</h3>
+                        <div id="weekReminderList" class="reminder-customer-list">
+                            <!-- 本周概览 -->
+                        </div>
+                    </div>
+                </div>
+                <div class="reminder-footer">
+                    <button id="laterReminderBtn" class="later-btn">稍后提醒</button>
+                    <button id="closeReminderBtn" class="close-btn">知道了</button>
+                    <label class="no-remind-label">
+                        <input type="checkbox" id="noRemindToday"> 今日不再提醒
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

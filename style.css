@@ -1,0 +1,986 @@
+body {
+    font-family: 'Arial', sans-serif;
+    line-height: 1.6;
+    color: #333;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: #f5f5f5;
+}
+
+.container {
+    background-color: white;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+h1, h2 {
+    color: #2c3e50;
+    margin-bottom: 20px;
+}
+
+.input-section, .reminder-section, .auth-section {
+    margin-bottom: 30px;
+    padding: 20px;
+    border: 1px solid #eee;
+    border-radius: 5px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+input[type="text"],
+input[type="date"],
+input[type="number"],
+input[type="tel"],
+input[type="password"],
+select,
+textarea {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-sizing: border-box;
+    font-family: inherit;
+    font-size: 14px;
+}
+
+textarea {
+    resize: vertical;
+    min-height: 60px;
+}
+
+select {
+    background-color: white;
+    cursor: pointer;
+}
+
+button {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+button:hover {
+    background-color: #2980b9;
+}
+
+.user-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #eee;
+    margin-bottom: 20px;
+}
+
+.user-info button {
+    background-color: #95a5a6;
+    font-size: 14px;
+    padding: 5px 10px;
+}
+
+.user-info button:hover {
+    background-color: #7f8c8d;
+}
+
+.auth-link {
+    text-align: center;
+    margin-top: 15px;
+}
+
+.auth-link a {
+    color: #3498db;
+    text-decoration: none;
+}
+
+.auth-link a:hover {
+    text-decoration: underline;
+}
+
+.error-message {
+    color: #e74c3c;
+    font-size: 14px;
+    margin-top: 10px;
+    text-align: center;
+}
+
+#reminderList {
+    margin-top: 20px;
+}
+
+.reminder-item {
+    padding: 15px;
+    margin-bottom: 10px;
+    background-color: #f9f9f9;
+    border-left: 4px solid #3498db;
+    border-radius: 4px;
+}
+
+.customer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.customer-header h3 {
+    margin: 0;
+    color: #2c3e50;
+}
+
+.delete-btn {
+    background-color: #e74c3c;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.delete-btn:hover {
+    background-color: #c0392b;
+}
+
+.reminder-dates {
+    color: #7f8c8d;
+    font-size: 14px;
+}
+
+.reminder-range {
+    color: #e74c3c;
+    font-weight: bold;
+}
+
+.import-section {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #eee;
+}
+
+.import-section h3 {
+    margin-top: 0;
+    color: #2c3e50;
+    font-size: 18px;
+}
+
+.import-section p {
+    color: #7f8c8d;
+    font-size: 14px;
+    margin-bottom: 10px;
+}
+
+#importStatus {
+    margin-top: 10px;
+    font-size: 14px;
+}
+
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    background-color: white;
+    margin: 5% auto;
+    padding: 20px;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 90vh;
+    position: relative;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    position: absolute;
+    top: 10px;
+    right: 15px;
+}
+
+.close:hover {
+    color: #000;
+}
+
+/* User Management Styles */
+.user-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    margin-bottom: 10px;
+    background-color: #f9f9f9;
+    border-radius: 4px;
+    border-left: 4px solid #3498db;
+}
+
+.user-item-info {
+    flex-grow: 1;
+}
+
+.user-item-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.user-item-actions button {
+    padding: 5px 10px;
+    font-size: 14px;
+}
+
+.delete-user-btn {
+    background-color: #e74c3c;
+}
+
+.delete-user-btn:hover {
+    background-color: #c0392b;
+}
+
+.promote-user-btn {
+    background-color: #2ecc71;
+}
+
+.promote-user-btn:hover {
+    background-color: #27ae60;
+}
+
+.demote-user-btn {
+    background-color: #f39c12;
+}
+
+.demote-user-btn:hover {
+    background-color: #d35400;
+}
+
+/* Search Box Styles */
+.search-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.search-box {
+    flex: 1;
+    min-width: 200px;
+}
+
+.search-box label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+.search-box input[type="text"] {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-sizing: border-box;
+    font-size: 16px;
+}
+
+.controls {
+    display: flex;
+    align-items: center;
+}
+
+.controls label {
+    display: flex;
+    align-items: center;
+    font-weight: normal;
+    margin: 0;
+}
+
+.controls input[type="checkbox"] {
+    margin-right: 5px;
+}
+
+/* Filter Controls Styles */
+.filter-controls {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.filter-group {
+    min-width: 150px;
+}
+
+.filter-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.filter-group select {
+    padding: 8px;
+    font-size: 14px;
+}
+
+/* Customer Item Styles */
+.customer-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.customer-actions input,
+.customer-actions button {
+    font-size: 12px;
+    padding: 5px 8px;
+}
+
+.customer-actions .update-date-input,
+.customer-actions .custom-interval-input {
+    max-width: 150px;
+}
+
+.edit-btn {
+    background-color: #f39c12;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 14px;
+    margin-left: 10px;
+}
+
+.edit-btn:hover {
+    background-color: #d35400;
+}
+
+.update-date-btn,
+.update-interval-btn {
+    background-color: #2ecc71;
+    font-size: 12px;
+}
+
+.update-date-btn:hover,
+.update-interval-btn:hover {
+    background-color: #27ae60;
+}
+
+/* Edit Modal Specific Styles */
+.close-edit {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    position: absolute;
+    top: 10px;
+    right: 15px;
+}
+
+.close-edit:hover {
+    color: #000;
+}
+
+/* Customer Info Display */
+.customer-info {
+    margin-bottom: 10px;
+}
+
+.customer-info p {
+    margin: 5px 0;
+    font-size: 14px;
+}
+
+/* Sync Latest Date Button Styles */
+.sync-date-btn {
+    background-color: #27ae60 !important;
+    color: white !important;
+    padding: 8px 12px !important;
+    border: none !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+    font-size: 12px !important;
+    white-space: nowrap !important;
+    transition: background-color 0.3s ease;
+}
+
+.sync-date-btn:hover {
+    background-color: #229954 !important;
+}
+
+.sync-date-btn:active {
+    background-color: #1e8449 !important;
+}
+
+/* Date Input with Sync Button Container */
+.date-input-container {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.date-input-container input[type="date"] {
+    flex: 1;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .search-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .filter-controls {
+        flex-direction: column;
+    }
+    
+    .customer-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .customer-actions input,
+    .customer-actions button {
+        width: 100%;
+        margin-bottom: 5px;
+    }
+    
+    .customer-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    
+    .date-input-container {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .sync-date-btn {
+        width: 100% !important;
+        margin-top: 5px !important;
+    }
+}
+
+/* Dashboard Styles */
+.dashboard-section {
+    margin-bottom: 30px;
+    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 10px;
+    color: white;
+}
+
+.dashboard-section h2 {
+    color: white;
+    text-align: center;
+    margin-bottom: 25px;
+    font-size: 24px;
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+}
+
+.dashboard-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.dashboard-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+}
+
+.dashboard-card.urgent {
+    border-left: 5px solid #e74c3c;
+}
+
+.dashboard-card.warning {
+    border-left: 5px solid #f39c12;
+}
+
+.dashboard-card.info {
+    border-left: 5px solid #3498db;
+}
+
+.dashboard-card.next {
+    border-left: 5px solid #2ecc71;
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.card-header h3 {
+    margin: 0;
+    color: #2c3e50;
+    font-size: 16px;
+}
+
+.count {
+    background: #ecf0f1;
+    color: #2c3e50;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.customer-list {
+    max-height: 200px;
+    overflow-y: auto;
+    margin-bottom: 15px;
+}
+
+.customer-list-item {
+    padding: 8px 12px;
+    margin-bottom: 5px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    border-left: 3px solid #3498db;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.customer-list-item:hover {
+    background: #e9ecef;
+}
+
+.customer-list-item.urgent {
+    border-left-color: #e74c3c;
+    background: #fdf2f2;
+}
+
+.customer-list-item.warning {
+    border-left-color: #f39c12;
+    background: #fef9e7;
+}
+
+.customer-name {
+    font-weight: bold;
+    color: #2c3e50;
+    font-size: 14px;
+}
+
+.customer-phone {
+    color: #7f8c8d;
+    font-size: 12px;
+    margin-top: 2px;
+}
+
+.export-btn {
+    width: 100%;
+    background: #95a5a6;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background-color 0.3s ease;
+}
+
+.export-btn:hover {
+    background: #7f8c8d;
+}
+
+/* Notification Center Styles */
+.notification-center {
+    position: relative;
+    display: inline-block;
+}
+
+.notification-btn {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    position: relative;
+    padding: 8px;
+    border-radius: 50%;
+    transition: background-color 0.3s ease;
+}
+
+.notification-btn:hover {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.notification-badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background: #e74c3c;
+    color: white;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+
+.notification-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    width: 320px;
+    max-height: 400px;
+    overflow-y: auto;
+    z-index: 1000;
+}
+
+.notification-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    border-bottom: 1px solid #eee;
+    background: #f8f9fa;
+    border-radius: 8px 8px 0 0;
+}
+
+.notification-header h4 {
+    margin: 0;
+    color: #2c3e50;
+    font-size: 16px;
+}
+
+.mark-all-read {
+    background: #3498db;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.mark-all-read:hover {
+    background: #2980b9;
+}
+
+.notification-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.notification-item {
+    padding: 12px 15px;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.notification-item:hover {
+    background: #f8f9fa;
+}
+
+.notification-item.unread {
+    background: #e8f4fd;
+    border-left: 3px solid #3498db;
+}
+
+.notification-title {
+    font-weight: bold;
+    color: #2c3e50;
+    font-size: 14px;
+    margin-bottom: 4px;
+}
+
+.notification-content {
+    color: #7f8c8d;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.notification-time {
+    color: #bdc3c7;
+    font-size: 11px;
+    margin-top: 4px;
+}
+
+/* User Actions Styles */
+.user-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Login Reminder Modal Styles */
+.reminder-modal .modal-content {
+    max-width: 700px;
+    width: 95%;
+}
+
+.reminder-content {
+    padding: 0;
+}
+
+.reminder-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 8px 8px 0 0;
+}
+
+.reminder-header h2 {
+    margin: 0;
+    color: white;
+    font-size: 20px;
+}
+
+.close-reminder {
+    color: white;
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+}
+
+.close-reminder:hover {
+    opacity: 0.8;
+}
+
+.reminder-body {
+    padding: 20px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.urgent-section,
+.today-section,
+.week-section {
+    margin-bottom: 20px;
+}
+
+.urgent-section h3 {
+    color: #e74c3c;
+    margin-bottom: 10px;
+    font-size: 16px;
+}
+
+.today-section h3 {
+    color: #f39c12;
+    margin-bottom: 10px;
+    font-size: 16px;
+}
+
+.week-section h3 {
+    color: #3498db;
+    margin-bottom: 10px;
+    font-size: 16px;
+}
+
+.reminder-customer-list {
+    background: #f8f9fa;
+    border-radius: 6px;
+    padding: 10px;
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+.reminder-customer-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    margin-bottom: 5px;
+    background: white;
+    border-radius: 4px;
+    border-left: 3px solid #3498db;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.reminder-customer-item:hover {
+    transform: translateX(5px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.reminder-customer-item.urgent {
+    border-left-color: #e74c3c;
+}
+
+.reminder-customer-item.warning {
+    border-left-color: #f39c12;
+}
+
+.reminder-customer-info {
+    flex: 1;
+}
+
+.reminder-customer-name {
+    font-weight: bold;
+    color: #2c3e50;
+    font-size: 14px;
+}
+
+.reminder-customer-phone {
+    color: #7f8c8d;
+    font-size: 12px;
+}
+
+.reminder-days {
+    background: #ecf0f1;
+    color: #2c3e50;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.reminder-days.overdue {
+    background: #e74c3c;
+    color: white;
+}
+
+.reminder-days.today {
+    background: #f39c12;
+    color: white;
+}
+
+.reminder-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    background: #f8f9fa;
+    border-radius: 0 0 8px 8px;
+    border-top: 1px solid #eee;
+}
+
+.later-btn {
+    background: #95a5a6;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.later-btn:hover {
+    background: #7f8c8d;
+}
+
+.close-btn {
+    background: #3498db;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.close-btn:hover {
+    background: #2980b9;
+}
+
+.no-remind-label {
+    display: flex;
+    align-items: center;
+    font-size: 12px;
+    color: #7f8c8d;
+    cursor: pointer;
+}
+
+.no-remind-label input[type="checkbox"] {
+    margin-right: 5px;
+    width: auto;
+}
+
+/* Empty State Styles */
+.empty-state {
+    text-align: center;
+    padding: 20px;
+    color: #7f8c8d;
+    font-style: italic;
+}
+
+/* Responsive Design for New Components */
+@media (max-width: 768px) {
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .notification-dropdown {
+        width: 280px;
+        right: -50px;
+    }
+    
+    .reminder-modal .modal-content {
+        width: 98%;
+        margin: 1% auto;
+    }
+    
+    .reminder-footer {
+        flex-direction: column;
+        gap: 10px;
+        align-items: stretch;
+    }
+    
+    .reminder-footer button {
+        width: 100%;
+    }
+    
+    .user-actions {
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+    
+    .user-actions button {
+        font-size: 12px;
+        padding: 5px 8px;
+    }
+}
