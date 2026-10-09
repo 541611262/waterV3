@@ -69,6 +69,7 @@ const importStatus = document.getElementById('importStatus');
 const customerSearch = document.getElementById('customerSearch');
 const regionFilter = document.getElementById('regionFilter');
 const followupMonthFilter = document.getElementById('followupMonthFilter');
+const sortOrder = document.getElementById('sortOrder');
 
 // 编辑模态框相关元素
 const editCustomerModal = document.getElementById('editCustomerModal');
@@ -139,6 +140,7 @@ function bindEventListeners() {
     if (customerSearch) customerSearch.addEventListener('input', renderReminderList);
     if (regionFilter) regionFilter.addEventListener('change', renderReminderList);
     if (followupMonthFilter) followupMonthFilter.addEventListener('change', renderReminderList);
+    if (sortOrder) sortOrder.addEventListener('change', renderReminderList);
     if (logoutBtn) logoutBtn.addEventListener('click', logout);
     if (changePasswordBtn) changePasswordBtn.addEventListener('click', showChangePasswordModal);
     
@@ -161,6 +163,11 @@ function bindEventListeners() {
     
     // 绑定历史记录管理相关事件
     bindHistoryManagementEvents();
+    
+    // 绑定新功能事件
+    bindDashboardEvents();
+    bindNotificationEvents();
+    bindReminderModalEvents();
 }
 
 // 绑定历史记录管理事件
@@ -387,7 +394,11 @@ function showMainApp() {
     mainApp.style.display = 'block';
     currentUsername.textContent = currentUser.username;
     currentUserRole.textContent = currentUser.role === 'admin' ? '管理员' : '普通用户';
+    
+    // 初始化所有功能
     renderReminderList();
+    updateDashboard();
+    updateNotifications();
     
     if (currentUser.role === 'admin') {
         const userManagementBtn = document.createElement('button');
@@ -397,9 +408,12 @@ function showMainApp() {
         userManagementBtn.addEventListener('click', showAdminUserManagement);
         
         if (!document.getElementById('userManagementBtn')) {
-            document.querySelector('.user-info').appendChild(userManagementBtn);
+            document.querySelector('.user-actions').appendChild(userManagementBtn);
         }
     }
+    
+    // 检查并显示登录提醒（延迟执行，确保界面完全加载）
+    setTimeout(checkAndShowLoginReminder, 2000);
 }
 
 // 显示管理员用户管理界面
@@ -2059,15 +2073,25 @@ function renderReminderList() {
     const showAll = showAllCheckbox ? showAllCheckbox.checked : false;
     let filteredCustomers = searchFilteredCustomers;
     
-    // 按照建议更换时间从新到旧排序（日期越新越靠前）
+    // 根据用户选择的排序方式进行排序
+    const selectedSortOrder = sortOrder ? sortOrder.value : 'desc';
     filteredCustomers.sort((a, b) => {
         const aLatestDate = getLatestReplacementDate(a);
         const bLatestDate = getLatestReplacementDate(b);
         const aReplacementDate = calculateReplacementDate(aLatestDate, a.customInterval);
         const bReplacementDate = calculateReplacementDate(bLatestDate, b.customInterval);
         
-        // 转换为Date对象进行比较，新日期在前（降序）
-        return new Date(bReplacementDate) - new Date(aReplacementDate);
+        // 转换为Date对象进行比较
+        const dateA = new Date(aReplacementDate);
+        const dateB = new Date(bReplacementDate);
+        
+        if (selectedSortOrder === 'asc') {
+            // 从旧到新（升序）
+            return dateA - dateB;
+        } else {
+            // 从新到旧（降序）- 默认
+            return dateB - dateA;
+        }
     });
     
     if (!showAll) {
@@ -2122,7 +2146,7 @@ function renderReminderList() {
                 <p><strong>联系人:</strong> ${customer.contactPerson}</p>
                 <p><strong>电话:</strong> ${customer.phoneNumber}</p>
                 <p><strong>区域:</strong> ${customer.region || '未设置'}</p>
-                <p><strong>滤芯购买日期:</strong> ${customer.filterPurchaseDate}</p>
+                <p><strong>上次滤芯购买日期:</strong> ${getLatestReplacementDate(customer)}</p>
                 <p><strong>建议更换时间:</strong> ${reminderRange.min}</p>
                 <p><strong>自定义间隔:</strong> ${customer.customInterval ? customer.customInterval + '天' : '默认(60-120天)'}</p>
                 <p><strong>备注:</strong> ${customer.notes || '无'}</p>
@@ -2649,7 +2673,8 @@ function saveReplacementRecord() {
     // 添加记录到历史
     customer.replacementHistory.push(newRecord);
     
-    // 不再直接更新filterPurchaseDate，而是通过getLatestReplacementDate获取最新日期
+    // 自动更新客户的上次滤芯购买日期为最新的更换记录日期
+    customer.filterPurchaseDate = getLatestReplacementDate(customer);
     
     // 保存数据
     saveCustomersToStorage();
@@ -2663,4 +2688,571 @@ function saveReplacementRecord() {
     closeAddReplacementModal();
     
     alert('更换记录已成功添加');
+}
+
+// 绑定仪表板事件
+function bindDashboardEvents() {
+    setTimeout(() => {
+        const exportTodayBtn = document.getElementById('exportTodayBtn');
+        const exportWeekBtn = document.getElementById('exportWeekBtn');
+        const exportMonthBtn = document.getElementById('exportMonthBtn');
+        const exportNextMonthBtn = document.getElementById('exportNextMonthBtn');
+        
+        if (exportTodayBtn) exportTodayBtn.addEventListener('click', () => exportDashboardData('today'));
+        if (exportWeekBtn) exportWeekBtn.addEventListener('click', () => exportDashboardData('week'));
+        if (exportMonthBtn) exportMonthBtn.addEventListener('click', () => exportDashboardData('month'));
+        if (exportNextMonthBtn) exportNextMonthBtn.addEventListener('click', () => exportDashboardData('nextMonth'));
+        
+        // 初始化仪表板数据
+        updateDashboard();
+    }, 200);
+}
+
+// 绑定通知中心事件
+function bindNotificationEvents() {
+    setTimeout(() => {
+        const notificationBtn = document.getElementById('notificationBtn');
+        const markAllReadBtn = document.getElementById('markAllReadBtn');
+        const notificationDropdown = document.getElementById('notificationDropdown');
+        
+        if (notificationBtn) {
+            notificationBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleNotificationDropdown();
+            });
+        }
+        
+        if (markAllReadBtn) {
+            markAllReadBtn.addEventListener('click', markAllNotificationsRead);
+        }
+        
+        // 点击其他地方关闭下拉框
+        document.addEventListener('click', (e) => {
+            if (notificationDropdown && !notificationDropdown.contains(e.target) && e.target !== notificationBtn) {
+                notificationDropdown.style.display = 'none';
+            }
+        });
+        
+        // 初始化通知
+        updateNotifications();
+    }, 200);
+}
+
+// 绑定登录提醒模态框事件
+function bindReminderModalEvents() {
+    setTimeout(() => {
+        const closeReminderBtn = document.querySelector('.close-reminder');
+        const laterReminderBtn = document.getElementById('laterReminderBtn');
+        const closeReminderModalBtn = document.getElementById('closeReminderBtn');
+        const noRemindTodayCheckbox = document.getElementById('noRemindToday');
+        const loginReminderModal = document.getElementById('loginReminderModal');
+        
+        if (closeReminderBtn) {
+            closeReminderBtn.addEventListener('click', closeLoginReminderModal);
+        }
+        
+        if (laterReminderBtn) {
+            laterReminderBtn.addEventListener('click', () => {
+                closeLoginReminderModal();
+                // 30分钟后再次提醒
+                setTimeout(checkAndShowLoginReminder, 30 * 60 * 1000);
+            });
+        }
+        
+        if (closeReminderModalBtn) {
+            closeReminderModalBtn.addEventListener('click', closeLoginReminderModal);
+        }
+        
+        if (noRemindTodayCheckbox) {
+            noRemindTodayCheckbox.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    const today = new Date().toISOString().split('T')[0];
+                    localStorage.setItem('noRemindDate', today);
+                }
+            });
+        }
+        
+        // 点击模态框外部关闭
+        if (loginReminderModal) {
+            window.addEventListener('click', (e) => {
+                if (e.target === loginReminderModal) {
+                    closeLoginReminderModal();
+                }
+            });
+        }
+        
+        // 登录后检查是否需要显示提醒
+        setTimeout(checkAndShowLoginReminder, 1000);
+    }, 200);
+}
+
+// 更新仪表板数据
+function updateDashboard() {
+    if (!currentUser) return;
+    
+    const userCustomers = getCurrentUserCustomers();
+    const today = new Date();
+    
+    // 分类客户
+    const todayCustomers = [];
+    const weekCustomers = [];
+    const monthCustomers = [];
+    const nextMonthCustomers = [];
+    
+    userCustomers.forEach(customer => {
+        const latestDate = getLatestReplacementDate(customer);
+        const replacementDate = new Date(calculateReplacementDate(latestDate, customer.customInterval));
+        const daysDiff = Math.ceil((replacementDate - today) / (1000 * 60 * 60 * 24));
+        
+        // 今日到期（包括过期）
+        if (daysDiff <= 0) {
+            todayCustomers.push(customer);
+        }
+        // 本周到期（1-7天内）
+        else if (daysDiff <= 7) {
+            weekCustomers.push(customer);
+        }
+        // 本月到期（8-30天内）
+        else if (daysDiff <= 30) {
+            monthCustomers.push(customer);
+        }
+        // 下月到期（31-60天内）
+        else if (daysDiff <= 60) {
+            nextMonthCustomers.push(customer);
+        }
+    });
+    
+    // 更新计数
+    updateDashboardCount('todayCount', todayCustomers.length);
+    updateDashboardCount('thisWeekCount', weekCustomers.length);
+    updateDashboardCount('thisMonthCount', monthCustomers.length);
+    updateDashboardCount('nextMonthCount', nextMonthCustomers.length);
+    
+    // 更新客户列表
+    updateDashboardList('todayList', todayCustomers, 'urgent');
+    updateDashboardList('thisWeekList', weekCustomers, 'warning');
+    updateDashboardList('thisMonthList', monthCustomers, 'info');
+    updateDashboardList('nextMonthList', nextMonthCustomers, 'next');
+}
+
+// 更新仪表板计数
+function updateDashboardCount(elementId, count) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.textContent = count;
+    }
+}
+
+// 更新仪表板客户列表
+function updateDashboardList(elementId, customers, urgencyClass) {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+    
+    if (customers.length === 0) {
+        element.innerHTML = '<div class="empty-state">暂无客户</div>';
+        return;
+    }
+    
+    let html = '';
+    customers.slice(0, 5).forEach(customer => { // 只显示前5个
+        const latestDate = getLatestReplacementDate(customer);
+        const replacementDate = new Date(calculateReplacementDate(latestDate, customer.customInterval));
+        const today = new Date();
+        const daysDiff = Math.ceil((replacementDate - today) / (1000 * 60 * 60 * 24));
+        
+        html += `
+            <div class="customer-list-item ${urgencyClass}" onclick="scrollToCustomer(${customer.id})">
+                <div class="customer-name">${customer.name}</div>
+                <div class="customer-phone">${customer.phoneNumber}</div>
+                <div class="customer-days">${daysDiff <= 0 ? '已到期' : `${daysDiff}天后`}</div>
+            </div>
+        `;
+    });
+    
+    if (customers.length > 5) {
+        html += `<div class="customer-list-item" style="text-align: center; color: #7f8c8d; font-style: italic;">还有 ${customers.length - 5} 个客户...</div>`;
+    }
+    
+    element.innerHTML = html;
+}
+
+// 滚动到指定客户
+function scrollToCustomer(customerId) {
+    // 先确保显示所有客户
+    const showAllCheckbox = document.getElementById('showAll');
+    if (showAllCheckbox && !showAllCheckbox.checked) {
+        showAllCheckbox.checked = true;
+        renderReminderList();
+    }
+    
+    // 等待渲染完成后滚动
+    setTimeout(() => {
+        const customerElements = document.querySelectorAll('.customer-item');
+        customerElements.forEach(element => {
+            const editBtn = element.querySelector('.edit-btn');
+            if (editBtn && editBtn.onclick.toString().includes(customerId)) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                element.style.backgroundColor = '#e8f4fd';
+                setTimeout(() => {
+                    element.style.backgroundColor = '';
+                }, 3000);
+            }
+        });
+    }, 100);
+}
+
+// 导出仪表板数据
+function exportDashboardData(type) {
+    const userCustomers = getCurrentUserCustomers();
+    const today = new Date();
+    let filteredCustomers = [];
+    let fileName = '';
+    
+    userCustomers.forEach(customer => {
+        const latestDate = getLatestReplacementDate(customer);
+        const replacementDate = new Date(calculateReplacementDate(latestDate, customer.customInterval));
+        const daysDiff = Math.ceil((replacementDate - today) / (1000 * 60 * 60 * 24));
+        
+        switch (type) {
+            case 'today':
+                if (daysDiff <= 0) filteredCustomers.push(customer);
+                fileName = '今日到期客户';
+                break;
+            case 'week':
+                if (daysDiff > 0 && daysDiff <= 7) filteredCustomers.push(customer);
+                fileName = '本周到期客户';
+                break;
+            case 'month':
+                if (daysDiff > 7 && daysDiff <= 30) filteredCustomers.push(customer);
+                fileName = '本月到期客户';
+                break;
+            case 'nextMonth':
+                if (daysDiff > 30 && daysDiff <= 60) filteredCustomers.push(customer);
+                fileName = '下月到期客户';
+                break;
+        }
+    });
+    
+    if (filteredCustomers.length === 0) {
+        alert('没有符合条件的客户数据');
+        return;
+    }
+    
+    // 创建CSV内容
+    let csvContent = '\uFEFF客户名称,联系人,联系电话,区域,建议更换日期,剩余天数,备注\n';
+    
+    filteredCustomers.forEach(customer => {
+        const latestDate = getLatestReplacementDate(customer);
+        const replacementDate = calculateReplacementDate(latestDate, customer.customInterval);
+        const daysDiff = Math.ceil((new Date(replacementDate) - today) / (1000 * 60 * 60 * 24));
+        const remainingDays = daysDiff <= 0 ? '已到期' : `${daysDiff}天`;
+        
+        csvContent += `"${customer.name}","${customer.contactPerson}","${customer.phoneNumber}","${customer.region || ''}","${replacementDate}","${remainingDays}","${customer.notes || ''}"\n`;
+    });
+    
+    // 下载文件
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const date = new Date().toISOString().split('T')[0];
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${fileName}_${date}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    alert(`${fileName}数据导出完成！共导出 ${filteredCustomers.length} 个客户`);
+}
+
+// 更新通知
+function updateNotifications() {
+    if (!currentUser) return;
+    
+    const notifications = generateNotifications();
+    updateNotificationBadge(notifications.length);
+    renderNotificationList(notifications);
+}
+
+// 生成通知
+function generateNotifications() {
+    const userCustomers = getCurrentUserCustomers();
+    const notifications = [];
+    const today = new Date();
+    
+    userCustomers.forEach(customer => {
+        const latestDate = getLatestReplacementDate(customer);
+        const replacementDate = new Date(calculateReplacementDate(latestDate, customer.customInterval));
+        const daysDiff = Math.ceil((replacementDate - today) / (1000 * 60 * 60 * 24));
+        
+        let notification = null;
+        
+        if (daysDiff < -7) {
+            // 超期一周以上
+            notification = {
+                id: `overdue-${customer.id}`,
+                type: 'urgent',
+                title: '严重超期提醒',
+                content: `${customer.name} 的滤芯已超期 ${Math.abs(daysDiff)} 天，请尽快联系更换`,
+                customer: customer,
+                time: new Date().toISOString(),
+                unread: true
+            };
+        } else if (daysDiff <= 0) {
+            // 今日到期或轻微超期
+            notification = {
+                id: `due-${customer.id}`,
+                type: 'warning',
+                title: daysDiff === 0 ? '今日到期提醒' : '超期提醒',
+                content: `${customer.name} 的滤芯${daysDiff === 0 ? '今日到期' : `已超期 ${Math.abs(daysDiff)} 天`}，建议及时更换`,
+                customer: customer,
+                time: new Date().toISOString(),
+                unread: true
+            };
+        } else if (daysDiff <= 3) {
+            // 3天内到期
+            notification = {
+                id: `soon-${customer.id}`,
+                type: 'info',
+                title: '即将到期提醒',
+                content: `${customer.name} 的滤芯将在 ${daysDiff} 天后到期，请提前准备`,
+                customer: customer,
+                time: new Date().toISOString(),
+                unread: true
+            };
+        }
+        
+        if (notification) {
+            notifications.push(notification);
+        }
+    });
+    
+    // 按紧急程度排序
+    notifications.sort((a, b) => {
+        const priority = { urgent: 3, warning: 2, info: 1 };
+        return priority[b.type] - priority[a.type];
+    });
+    
+    return notifications;
+}
+
+// 更新通知徽章
+function updateNotificationBadge(count) {
+    const badge = document.getElementById('notificationBadge');
+    if (badge) {
+        if (count > 0) {
+            badge.textContent = count > 99 ? '99+' : count;
+            badge.style.display = 'flex';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+}
+
+// 渲染通知列表
+function renderNotificationList(notifications) {
+    const notificationList = document.getElementById('notificationList');
+    if (!notificationList) return;
+    
+    if (notifications.length === 0) {
+        notificationList.innerHTML = '<div class="empty-state">暂无通知</div>';
+        return;
+    }
+    
+    let html = '';
+    notifications.forEach(notification => {
+        html += `
+            <div class="notification-item ${notification.unread ? 'unread' : ''}" onclick="handleNotificationClick(${notification.customer.id})">
+                <div class="notification-title">${notification.title}</div>
+                <div class="notification-content">${notification.content}</div>
+                <div class="notification-time">${formatNotificationTime(notification.time)}</div>
+            </div>
+        `;
+    });
+    
+    notificationList.innerHTML = html;
+}
+
+// 格式化通知时间
+function formatNotificationTime(timeString) {
+    const time = new Date(timeString);
+    const now = new Date();
+    const diffMinutes = Math.floor((now - time) / (1000 * 60));
+    
+    if (diffMinutes < 1) return '刚刚';
+    if (diffMinutes < 60) return `${diffMinutes}分钟前`;
+    
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return `${diffHours}小时前`;
+    
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}天前`;
+    
+    return time.toLocaleDateString();
+}
+
+// 切换通知下拉框
+function toggleNotificationDropdown() {
+    const dropdown = document.getElementById('notificationDropdown');
+    if (dropdown) {
+        const isVisible = dropdown.style.display === 'block';
+        dropdown.style.display = isVisible ? 'none' : 'block';
+        
+        if (!isVisible) {
+            updateNotifications(); // 打开时刷新通知
+        }
+    }
+}
+
+// 处理通知点击
+function handleNotificationClick(customerId) {
+    // 关闭通知下拉框
+    const dropdown = document.getElementById('notificationDropdown');
+    if (dropdown) {
+        dropdown.style.display = 'none';
+    }
+    
+    // 滚动到对应客户
+    scrollToCustomer(customerId);
+}
+
+// 标记所有通知为已读
+function markAllNotificationsRead() {
+    updateNotificationBadge(0);
+    const notificationItems = document.querySelectorAll('.notification-item.unread');
+    notificationItems.forEach(item => {
+        item.classList.remove('unread');
+    });
+}
+
+// 检查并显示登录提醒
+function checkAndShowLoginReminder() {
+    if (!currentUser) return;
+    
+    // 检查今日是否已设置不再提醒
+    const today = new Date().toISOString().split('T')[0];
+    const noRemindDate = localStorage.getItem('noRemindDate');
+    if (noRemindDate === today) {
+        return;
+    }
+    
+    const userCustomers = getCurrentUserCustomers();
+    const today_date = new Date();
+    
+    // 分类客户
+    const urgentCustomers = []; // 超期客户
+    const todayCustomers = [];  // 今日到期客户
+    const weekCustomers = [];   // 本周到期客户
+    
+    userCustomers.forEach(customer => {
+        const latestDate = getLatestReplacementDate(customer);
+        const replacementDate = new Date(calculateReplacementDate(latestDate, customer.customInterval));
+        const daysDiff = Math.ceil((replacementDate - today_date) / (1000 * 60 * 60 * 24));
+        
+        if (daysDiff < 0) {
+            urgentCustomers.push({ customer, daysDiff });
+        } else if (daysDiff === 0) {
+            todayCustomers.push({ customer, daysDiff });
+        } else if (daysDiff <= 7) {
+            weekCustomers.push({ customer, daysDiff });
+        }
+    });
+    
+    // 如果有需要提醒的客户，显示提醒模态框
+    if (urgentCustomers.length > 0 || todayCustomers.length > 0 || weekCustomers.length > 0) {
+        showLoginReminderModal(urgentCustomers, todayCustomers, weekCustomers);
+    }
+}
+
+// 显示登录提醒模态框
+function showLoginReminderModal(urgentCustomers, todayCustomers, weekCustomers) {
+    const modal = document.getElementById('loginReminderModal');
+    if (!modal) return;
+    
+    // 更新紧急提醒
+    const urgentList = document.getElementById('urgentList');
+    if (urgentList) {
+        if (urgentCustomers.length === 0) {
+            urgentList.innerHTML = '<div class="empty-state">无紧急提醒</div>';
+        } else {
+            let html = '';
+            urgentCustomers.forEach(({ customer, daysDiff }) => {
+                html += `
+                    <div class="reminder-customer-item urgent" onclick="handleReminderCustomerClick(${customer.id})">
+                        <div class="reminder-customer-info">
+                            <div class="reminder-customer-name">${customer.name}</div>
+                            <div class="reminder-customer-phone">${customer.phoneNumber}</div>
+                        </div>
+                        <div class="reminder-days overdue">超期${Math.abs(daysDiff)}天</div>
+                    </div>
+                `;
+            });
+            urgentList.innerHTML = html;
+        }
+    }
+    
+    // 更新今日到期
+    const todayReminderList = document.getElementById('todayReminderList');
+    if (todayReminderList) {
+        if (todayCustomers.length === 0) {
+            todayReminderList.innerHTML = '<div class="empty-state">今日无到期客户</div>';
+        } else {
+            let html = '';
+            todayCustomers.forEach(({ customer, daysDiff }) => {
+                html += `
+                    <div class="reminder-customer-item warning" onclick="handleReminderCustomerClick(${customer.id})">
+                        <div class="reminder-customer-info">
+                            <div class="reminder-customer-name">${customer.name}</div>
+                            <div class="reminder-customer-phone">${customer.phoneNumber}</div>
+                        </div>
+                        <div class="reminder-days today">今日到期</div>
+                    </div>
+                `;
+            });
+            todayReminderList.innerHTML = html;
+        }
+    }
+    
+    // 更新本周概览
+    const weekReminderList = document.getElementById('weekReminderList');
+    if (weekReminderList) {
+        if (weekCustomers.length === 0) {
+            weekReminderList.innerHTML = '<div class="empty-state">本周无到期客户</div>';
+        } else {
+            let html = '';
+            weekCustomers.slice(0, 5).forEach(({ customer, daysDiff }) => { // 只显示前5个
+                html += `
+                    <div class="reminder-customer-item" onclick="handleReminderCustomerClick(${customer.id})">
+                        <div class="reminder-customer-info">
+                            <div class="reminder-customer-name">${customer.name}</div>
+                            <div class="reminder-customer-phone">${customer.phoneNumber}</div>
+                        </div>
+                        <div class="reminder-days">${daysDiff}天后</div>
+                    </div>
+                `;
+            });
+            if (weekCustomers.length > 5) {
+                html += `<div class="reminder-customer-item" style="text-align: center; color: #7f8c8d; font-style: italic;">还有 ${weekCustomers.length - 5} 个客户...</div>`;
+            }
+            weekReminderList.innerHTML = html;
+        }
+    }
+    
+    // 显示模态框
+    modal.style.display = 'block';
+}
+
+// 处理提醒客户点击
+function handleReminderCustomerClick(customerId) {
+    closeLoginReminderModal();
+    scrollToCustomer(customerId);
+}
+
+// 关闭登录提醒模态框
+function closeLoginReminderModal() {
+    const modal = document.getElementById('loginReminderModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
 }

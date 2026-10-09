@@ -419,6 +419,38 @@ button:hover {
     font-size: 14px;
 }
 
+/* Sync Latest Date Button Styles */
+.sync-date-btn {
+    background-color: #27ae60 !important;
+    color: white !important;
+    padding: 8px 12px !important;
+    border: none !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+    font-size: 12px !important;
+    white-space: nowrap !important;
+    transition: background-color 0.3s ease;
+}
+
+.sync-date-btn:hover {
+    background-color: #229954 !important;
+}
+
+.sync-date-btn:active {
+    background-color: #1e8449 !important;
+}
+
+/* Date Input with Sync Button Container */
+.date-input-container {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.date-input-container input[type="date"] {
+    flex: 1;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     .search-controls {
@@ -445,5 +477,510 @@ button:hover {
         flex-direction: column;
         align-items: flex-start;
         gap: 10px;
+    }
+    
+    .date-input-container {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .sync-date-btn {
+        width: 100% !important;
+        margin-top: 5px !important;
+    }
+}
+
+/* Dashboard Styles */
+.dashboard-section {
+    margin-bottom: 30px;
+    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 10px;
+    color: white;
+}
+
+.dashboard-section h2 {
+    color: white;
+    text-align: center;
+    margin-bottom: 25px;
+    font-size: 24px;
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+}
+
+.dashboard-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.dashboard-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+}
+
+.dashboard-card.urgent {
+    border-left: 5px solid #e74c3c;
+}
+
+.dashboard-card.warning {
+    border-left: 5px solid #f39c12;
+}
+
+.dashboard-card.info {
+    border-left: 5px solid #3498db;
+}
+
+.dashboard-card.next {
+    border-left: 5px solid #2ecc71;
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.card-header h3 {
+    margin: 0;
+    color: #2c3e50;
+    font-size: 16px;
+}
+
+.count {
+    background: #ecf0f1;
+    color: #2c3e50;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.customer-list {
+    max-height: 200px;
+    overflow-y: auto;
+    margin-bottom: 15px;
+}
+
+.customer-list-item {
+    padding: 8px 12px;
+    margin-bottom: 5px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    border-left: 3px solid #3498db;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.customer-list-item:hover {
+    background: #e9ecef;
+}
+
+.customer-list-item.urgent {
+    border-left-color: #e74c3c;
+    background: #fdf2f2;
+}
+
+.customer-list-item.warning {
+    border-left-color: #f39c12;
+    background: #fef9e7;
+}
+
+.customer-name {
+    font-weight: bold;
+    color: #2c3e50;
+    font-size: 14px;
+}
+
+.customer-phone {
+    color: #7f8c8d;
+    font-size: 12px;
+    margin-top: 2px;
+}
+
+.export-btn {
+    width: 100%;
+    background: #95a5a6;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background-color 0.3s ease;
+}
+
+.export-btn:hover {
+    background: #7f8c8d;
+}
+
+/* Notification Center Styles */
+.notification-center {
+    position: relative;
+    display: inline-block;
+}
+
+.notification-btn {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    position: relative;
+    padding: 8px;
+    border-radius: 50%;
+    transition: background-color 0.3s ease;
+}
+
+.notification-btn:hover {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.notification-badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background: #e74c3c;
+    color: white;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+
+.notification-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    width: 320px;
+    max-height: 400px;
+    overflow-y: auto;
+    z-index: 1000;
+}
+
+.notification-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    border-bottom: 1px solid #eee;
+    background: #f8f9fa;
+    border-radius: 8px 8px 0 0;
+}
+
+.notification-header h4 {
+    margin: 0;
+    color: #2c3e50;
+    font-size: 16px;
+}
+
+.mark-all-read {
+    background: #3498db;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.mark-all-read:hover {
+    background: #2980b9;
+}
+
+.notification-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.notification-item {
+    padding: 12px 15px;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.notification-item:hover {
+    background: #f8f9fa;
+}
+
+.notification-item.unread {
+    background: #e8f4fd;
+    border-left: 3px solid #3498db;
+}
+
+.notification-title {
+    font-weight: bold;
+    color: #2c3e50;
+    font-size: 14px;
+    margin-bottom: 4px;
+}
+
+.notification-content {
+    color: #7f8c8d;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.notification-time {
+    color: #bdc3c7;
+    font-size: 11px;
+    margin-top: 4px;
+}
+
+/* User Actions Styles */
+.user-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Login Reminder Modal Styles */
+.reminder-modal .modal-content {
+    max-width: 700px;
+    width: 95%;
+}
+
+.reminder-content {
+    padding: 0;
+}
+
+.reminder-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 8px 8px 0 0;
+}
+
+.reminder-header h2 {
+    margin: 0;
+    color: white;
+    font-size: 20px;
+}
+
+.close-reminder {
+    color: white;
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+}
+
+.close-reminder:hover {
+    opacity: 0.8;
+}
+
+.reminder-body {
+    padding: 20px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.urgent-section,
+.today-section,
+.week-section {
+    margin-bottom: 20px;
+}
+
+.urgent-section h3 {
+    color: #e74c3c;
+    margin-bottom: 10px;
+    font-size: 16px;
+}
+
+.today-section h3 {
+    color: #f39c12;
+    margin-bottom: 10px;
+    font-size: 16px;
+}
+
+.week-section h3 {
+    color: #3498db;
+    margin-bottom: 10px;
+    font-size: 16px;
+}
+
+.reminder-customer-list {
+    background: #f8f9fa;
+    border-radius: 6px;
+    padding: 10px;
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+.reminder-customer-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    margin-bottom: 5px;
+    background: white;
+    border-radius: 4px;
+    border-left: 3px solid #3498db;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.reminder-customer-item:hover {
+    transform: translateX(5px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.reminder-customer-item.urgent {
+    border-left-color: #e74c3c;
+}
+
+.reminder-customer-item.warning {
+    border-left-color: #f39c12;
+}
+
+.reminder-customer-info {
+    flex: 1;
+}
+
+.reminder-customer-name {
+    font-weight: bold;
+    color: #2c3e50;
+    font-size: 14px;
+}
+
+.reminder-customer-phone {
+    color: #7f8c8d;
+    font-size: 12px;
+}
+
+.reminder-days {
+    background: #ecf0f1;
+    color: #2c3e50;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.reminder-days.overdue {
+    background: #e74c3c;
+    color: white;
+}
+
+.reminder-days.today {
+    background: #f39c12;
+    color: white;
+}
+
+.reminder-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    background: #f8f9fa;
+    border-radius: 0 0 8px 8px;
+    border-top: 1px solid #eee;
+}
+
+.later-btn {
+    background: #95a5a6;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.later-btn:hover {
+    background: #7f8c8d;
+}
+
+.close-btn {
+    background: #3498db;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.close-btn:hover {
+    background: #2980b9;
+}
+
+.no-remind-label {
+    display: flex;
+    align-items: center;
+    font-size: 12px;
+    color: #7f8c8d;
+    cursor: pointer;
+}
+
+.no-remind-label input[type="checkbox"] {
+    margin-right: 5px;
+    width: auto;
+}
+
+/* Empty State Styles */
+.empty-state {
+    text-align: center;
+    padding: 20px;
+    color: #7f8c8d;
+    font-style: italic;
+}
+
+/* Responsive Design for New Components */
+@media (max-width: 768px) {
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .notification-dropdown {
+        width: 280px;
+        right: -50px;
+    }
+    
+    .reminder-modal .modal-content {
+        width: 98%;
+        margin: 1% auto;
+    }
+    
+    .reminder-footer {
+        flex-direction: column;
+        gap: 10px;
+        align-items: stretch;
+    }
+    
+    .reminder-footer button {
+        width: 100%;
+    }
+    
+    .user-actions {
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+    
+    .user-actions button {
+        font-size: 12px;
+        padding: 5px 8px;
     }
 }
