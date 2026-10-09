@@ -1,0 +1,15 @@
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 打包文件
+*.zip
+
+# 编辑器
+.vscode/
+.idea/
+
+# 真实客户数据导出(请勿提交)
+滤芯客户数据_*.csv
+滤芯客户历史记录详情_*.csv

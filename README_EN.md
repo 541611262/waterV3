@@ -1,54 +1,60 @@
-# Water Filter Reminder System
+# Water Filter Reminder System V3
 
-A web application to track and remind users when to replace their water filters.
+A web application to track and remind customers when to replace their water filters. Runs entirely client-side; no backend server required.
 
 ## Features
 
-- User registration and login system
+### Accounts
+- User registration and login
 - Password recovery with security questions
+- Change password
 - Admin user management panel
-- Client data management
-- Automatic reminder date calculations
-- CSV data import/export functionality
-- Client data sorting by recommended follow-up time
 
-## Installation
+### Customer Management
+- Add, edit and delete customers
+- Search by customer name, contact person or phone
+- Filter by region and month
+- Sort ascending / descending by date
+- Automatic next-replacement date calculation (custom interval, or default when left blank)
+- Filter replacement history: add, edit, view
 
-1. Clone this repository
-2. Navigate to the project directory
-3. Run a local server:
-   ```bash
-   python -m http.server 8000
-   ```
-4. Open `http://localhost:8000` in your browser
+### Reminders
+- Reminder dashboard: due today, this week, this month, next month — each list exportable
+- Notification center (mark all as read)
+- Daily reminder popup after login (urgent / due today / weekly overview), with "remind me later"
+
+### Import / Export
+- Import CSV / Excel (.csv, .xlsx, .xls), compatible with Windows WPS
+- Export customer data and detailed history records
+- Download sample file
 
 ## Usage
 
-### For Users
-1. Register an account or login if you already have one
-2. Add your water filter information
-3. The system will calculate and display when you need to replace your filter
-4. You'll see reminders when the replacement time approaches
+1. Clone this repository
+2. In the project directory, run a local server:
+   ```bash
+   python -m http.server 8000
+   ```
+3. Open `http://localhost:8000` in your browser
 
-### For Admins
-1. Login with admin credentials
-2. Access the admin panel to:
-   - Manage all users
-   - View system statistics
-   - Export data to CSV
+You can also open `index.html` directly in a browser.
 
-## Screenshots
+## Sample Data
 
-![Login Page](screenshots/login.png)
-![Dashboard](screenshots/dashboard.png)
-![Admin Panel](screenshots/admin.png)
+In `examples/`:
+- `客户数据示例.csv` — sample in the current import format
+- `测试数据_旧格式.csv` — legacy import format, for compatibility testing
 
 ## Technical Details
 
 - Frontend: HTML5, CSS3, JavaScript
-- Data Storage: localStorage
-- No backend server required (runs entirely client-side)
+- Data storage: browser localStorage
+- Data stays in each user's own browser and does not sync across devices — export backups regularly
+
+## Related
+
+- [waterv3-pro](https://github.com/541611262/waterv3-pro) — experimental React + TypeScript rewrite based on an earlier version
 
 ## License
 
-MIT License - see LICENSE file for details
+MIT
