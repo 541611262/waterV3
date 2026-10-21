@@ -1,0 +1,6 @@
+{
+  "read": "doc.uid == auth.uid || get('database.members.' + auth.uid).role == 'admin'",
+  "create": "doc._id == auth.uid && doc.uid == auth.uid && doc.role == 'member'",
+  "update": "get('database.members.' + auth.uid).role == 'admin'",
+  "delete": "get('database.members.' + auth.uid).role == 'admin'"
+}
