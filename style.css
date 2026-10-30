@@ -1551,3 +1551,16 @@ button:disabled:hover {
     top: 10px;
     right: 15px;
 }
+
+.link-btn {
+    background: none;
+    color: #2471a3;
+    padding: 0;
+    font-size: 14px;
+    text-decoration: underline;
+}
+
+.link-btn:hover {
+    background: none;
+    color: #1a5276;
+}

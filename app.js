@@ -2173,6 +2173,13 @@ function updateBatchBar() {
     selectAll.checked = visibleDeviceIds.length > 0 && visibleSelected === visibleDeviceIds.length;
     selectAll.indeterminate = visibleSelected > 0 && !selectAll.checked;
 
+    // 列表默认只显示到期记录；还有未显示的记录时，提供“选中全部”
+    const everything = document.getElementById('selectEverythingBtn');
+    const notShown = existing.size - visibleDeviceIds.length;
+    const allSelected = selected.length === existing.size;
+    everything.style.display = notShown > 0 && !allSelected ? '' : 'none';
+    everything.textContent = `还有 ${notShown} 条未显示 · 选中全部 ${existing.size} 条记录`;
+
     document.querySelectorAll('.record-select').forEach(box => {
         box.checked = selectedDeviceIds.has(Number(box.dataset.deviceId));
         box.closest('.customer-item').classList.toggle('selected', box.checked);
@@ -2190,6 +2197,10 @@ function bindBatchEvents() {
 
     document.getElementById('selectAllVisible').addEventListener('change', (e) => {
         visibleDeviceIds.forEach(id => (e.target.checked ? selectedDeviceIds.add(id) : selectedDeviceIds.delete(id)));
+        updateBatchBar();
+    });
+    document.getElementById('selectEverythingBtn').addEventListener('click', () => {
+        getCurrentUserDevices().forEach(entry => selectedDeviceIds.add(entry.device.id));
         updateBatchBar();
     });
     document.getElementById('batchClearBtn').addEventListener('click', () => {
@@ -2229,7 +2240,7 @@ function showBatchDeleteModal() {
         <p>将删除 <strong class="danger-text">${selected.length}</strong> 条装机记录，涉及 ${byCustomer.size} 个客户。
            ${wholeCustomers.length ? `其中 <strong class="danger-text">${wholeCustomers.length}</strong> 个客户的全部记录都被选中，这些客户及其跟踪记录会一并删除。` : ''}</p>
         ${othersCount ? `<p class="danger-text">⚠️ 其中 ${othersCount} 条属于其他同事负责的客户。</p>` : ''}
-        ${hiddenCount ? `<p class="danger-text">⚠️ 其中 ${hiddenCount} 条不在当前列表中（被搜索或筛选隐藏了），也会被删除。</p>` : ''}
+        ${hiddenCount ? `<p class="danger-text">⚠️ 其中 ${hiddenCount} 条不在当前列表中（被搜索、筛选或“只显示到期记录”隐藏了），也会被删除。</p>` : ''}
         <ul class="batch-delete-list">${list}${byCustomer.size > 10 ? `<li>……还有 ${byCustomer.size - 10} 个客户</li>` : ''}</ul>
         <p class="muted">删除后无法撤销${IS_CLOUD_MODE ? '，云端数据会同步删除' : ''}。</p>
     `;
