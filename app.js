@@ -181,6 +181,7 @@ function bindEventListeners() {
     
     // 绑定历史记录管理相关事件
     bindHistoryManagementEvents();
+    bindBatchEvents();
     
     // 绑定新功能事件
     bindDashboardEvents();
@@ -585,6 +586,7 @@ async function login(e) {
         try {
             const user = await CloudStore.signIn(username, password);
             await enterCloudSession(user);
+            loginError.textContent = '';
         } catch (error) {
             loginError.textContent = error.message || '登录失败';
         } finally {
@@ -678,6 +680,7 @@ async function logout() {
         memberNames.clear();
     }
     currentUser = null;
+    selectedDeviceIds.clear();
     const userManagementBtn = document.getElementById('userManagementBtn');
     if (userManagementBtn) userManagementBtn.remove();
     showLogin();
@@ -775,7 +778,7 @@ async function enterCloudSession(user) {
     currentUser = { id: user.uid, username: member.username || user.username, role: member.role === 'admin' ? 'admin' : 'user' };
     memberNames.set(currentUser.id, currentUser.username);
 
-    customers = (await CloudStore.loadCustomers(currentUser.role === 'admin')).map(normalizeCustomer);
+    customers = await CloudStore.loadCustomers(normalizeCustomer);
     if (currentUser.role === 'admin') {
         CloudStore.listMembers()
             .then(members => {
@@ -1745,16 +1748,19 @@ const followUpKey = item => `${item.date}|${item.content}`;
 const historyKey = item => `${item.date}|${item.filterModel}|${item.quantity}|${item.notes}`;
 
 function processImportRows(rows) {
-    // 表头：前 10 行中第一个能识别出“客户名称”列的行
+    // 表头：前 10 行中能识别出“客户名称”列、且识别出的列最多的一行
+    // （表格上方常有“XX客户台账”之类的标题行，不能只看是否含“客户”二字）
     let headerIndex = -1;
     let mapping = null;
+    let bestScore = 0;
     for (let i = 0; i < Math.min(rows.length, 10); i++) {
         if (isRowEmpty(rows[i])) continue;
         const candidate = detectColumnMapping(rows[i]);
-        if (candidate.name) {
+        const score = RECORD_FIELDS.filter(field => candidate[field.key]).length;
+        if (candidate.name && score > bestScore) {
             headerIndex = i;
             mapping = candidate;
-            break;
+            bestScore = score;
         }
     }
     if (!mapping) {
@@ -1888,21 +1894,21 @@ function deviceToSheetRow(customer, device) {
 }
 
 // 导出客户数据：列与《格式样板》一致，可直接重新导入
-function exportRecords(format = 'xlsx') {
-    const userCustomers = getCurrentUserCustomers();
-    if (userCustomers.length === 0) {
+// entries 为空时导出全部；传入 [{ customer, device }] 时只导出这些记录
+function exportRecords(format = 'xlsx', entries = null, { fileBaseName = `滤芯客户数据_${todayStr()}`, silent = false } = {}) {
+    const list = entries || getCurrentUserCustomers().flatMap(customer =>
+        (customer.devices.length ? customer.devices : [createDevice()]).map(device => ({ customer, device })));
+    if (list.length === 0) {
         alert('没有客户数据可导出');
         return;
     }
 
-    const rows = [RECORD_FIELDS.map(field => field.header)];
-    userCustomers.forEach(customer => {
-        const devices = customer.devices.length ? customer.devices : [createDevice()];
-        devices.forEach(device => rows.push(deviceToSheetRow(customer, device)));
-    });
-
-    downloadTable(rows, `滤芯客户数据_${todayStr()}`, { widths: RECORD_FIELDS.map(field => field.width), format });
-    alert(`导出完成！共 ${userCustomers.length} 个客户、${rows.length - 1} 条装机记录，可直接重新导入`);
+    const rows = [RECORD_FIELDS.map(field => field.header), ...list.map(({ customer, device }) => deviceToSheetRow(customer, device))];
+    downloadTable(rows, fileBaseName, { widths: RECORD_FIELDS.map(field => field.width), format });
+    if (!silent) {
+        const customerCount = new Set(list.map(entry => entry.customer.id)).size;
+        alert(`导出完成！共 ${customerCount} 个客户、${list.length} 条装机记录，可直接重新导入`);
+    }
 }
 
 // 下载导入模板（示例数据均为虚构）
@@ -2126,6 +2132,141 @@ function renderReminderList() {
     reminderList.innerHTML = entries.length
         ? entries.map(renderDeviceCard).join('')
         : `<p class="empty-list">${showAll ? '暂无符合条件的记录' : '暂无需要处理的记录，勾选“显示所有记录”查看全部'}</p>`;
+
+    visibleDeviceIds = entries.map(entry => entry.device.id);
+    updateBatchBar();
+}
+
+// ==================== 批量选择 / 导出 / 删除 ====================
+const selectedDeviceIds = new Set();
+let visibleDeviceIds = []; // 当前列表中显示的记录（受搜索和筛选影响）
+
+function getSelectedEntries() {
+    return getCurrentUserDevices().filter(entry => selectedDeviceIds.has(entry.device.id));
+}
+
+function updateBatchBar() {
+    const summary = document.getElementById('batchSummary');
+    if (!summary) return;
+
+    // 去掉已经不存在的记录
+    const existing = new Set(getCurrentUserDevices().map(entry => entry.device.id));
+    selectedDeviceIds.forEach(id => { if (!existing.has(id)) selectedDeviceIds.delete(id); });
+
+    const selected = getSelectedEntries();
+    const customerCount = new Set(selected.map(entry => entry.customer.id)).size;
+    const visibleSet = new Set(visibleDeviceIds);
+    const hiddenCount = selected.filter(entry => !visibleSet.has(entry.device.id)).length;
+
+    summary.innerHTML = selected.length
+        ? `已选 <strong>${selected.length}</strong> 条装机记录（${customerCount} 个客户）` +
+          (hiddenCount ? `<span class="batch-hidden-warning">，其中 ${hiddenCount} 条不在当前列表中</span>` : '')
+        : '未选择记录';
+    ['batchExportBtn', 'batchClearBtn', 'batchDeleteBtn'].forEach(id => {
+        const button = document.getElementById(id);
+        if (button) button.disabled = selected.length === 0;
+    });
+
+    const selectAll = document.getElementById('selectAllVisible');
+    const visibleSelected = visibleDeviceIds.filter(id => selectedDeviceIds.has(id)).length;
+    selectAll.disabled = visibleDeviceIds.length === 0;
+    selectAll.checked = visibleDeviceIds.length > 0 && visibleSelected === visibleDeviceIds.length;
+    selectAll.indeterminate = visibleSelected > 0 && !selectAll.checked;
+
+    document.querySelectorAll('.record-select').forEach(box => {
+        box.checked = selectedDeviceIds.has(Number(box.dataset.deviceId));
+        box.closest('.customer-item').classList.toggle('selected', box.checked);
+    });
+}
+
+function bindBatchEvents() {
+    reminderList.addEventListener('change', (e) => {
+        if (!e.target.matches('.record-select')) return;
+        const id = Number(e.target.dataset.deviceId);
+        if (e.target.checked) selectedDeviceIds.add(id);
+        else selectedDeviceIds.delete(id);
+        updateBatchBar();
+    });
+
+    document.getElementById('selectAllVisible').addEventListener('change', (e) => {
+        visibleDeviceIds.forEach(id => (e.target.checked ? selectedDeviceIds.add(id) : selectedDeviceIds.delete(id)));
+        updateBatchBar();
+    });
+    document.getElementById('batchClearBtn').addEventListener('click', () => {
+        selectedDeviceIds.clear();
+        updateBatchBar();
+    });
+    document.getElementById('batchExportBtn').addEventListener('click', () => {
+        exportRecords('xlsx', getSelectedEntries(), { fileBaseName: `所选客户数据_${todayStr()}` });
+    });
+    document.getElementById('batchDeleteBtn').addEventListener('click', showBatchDeleteModal);
+
+    const confirmInput = document.getElementById('batchDeleteConfirmInput');
+    confirmInput.addEventListener('input', () => {
+        document.getElementById('batchDeleteConfirmBtn').disabled = confirmInput.value.trim() !== '删除';
+    });
+    document.getElementById('batchDeleteConfirmBtn').addEventListener('click', confirmBatchDelete);
+    document.getElementById('batchDeleteCancelBtn').addEventListener('click', closeBatchDeleteModal);
+    document.querySelector('.close-batch-delete').addEventListener('click', closeBatchDeleteModal);
+}
+
+// 删除确认：列出将要删除的内容，必须手动输入“删除”才能确认；默认先导出备份。点击弹窗外部不会关闭
+function showBatchDeleteModal() {
+    const selected = getSelectedEntries().filter(entry => canEditCustomer(entry.customer));
+    if (!selected.length) return;
+
+    const byCustomer = new Map();
+    selected.forEach(({ customer }) => byCustomer.set(customer, (byCustomer.get(customer) || 0) + 1));
+    const wholeCustomers = [...byCustomer].filter(([customer, count]) => count === customer.devices.length);
+    const othersCount = selected.filter(entry => entry.customer.userId !== currentUser.id).length;
+    const visibleSet = new Set(visibleDeviceIds);
+    const hiddenCount = selected.filter(entry => !visibleSet.has(entry.device.id)).length;
+
+    const list = [...byCustomer].slice(0, 10).map(([customer, count]) =>
+        `<li>${escapeHtml(customer.name)}：${count} 条${count === customer.devices.length ? '<span class="danger-text">（全部记录，客户将被删除）</span>' : ''}</li>`).join('');
+
+    document.getElementById('batchDeleteSummary').innerHTML = `
+        <p>将删除 <strong class="danger-text">${selected.length}</strong> 条装机记录，涉及 ${byCustomer.size} 个客户。
+           ${wholeCustomers.length ? `其中 <strong class="danger-text">${wholeCustomers.length}</strong> 个客户的全部记录都被选中，这些客户及其跟踪记录会一并删除。` : ''}</p>
+        ${othersCount ? `<p class="danger-text">⚠️ 其中 ${othersCount} 条属于其他同事负责的客户。</p>` : ''}
+        ${hiddenCount ? `<p class="danger-text">⚠️ 其中 ${hiddenCount} 条不在当前列表中（被搜索或筛选隐藏了），也会被删除。</p>` : ''}
+        <ul class="batch-delete-list">${list}${byCustomer.size > 10 ? `<li>……还有 ${byCustomer.size - 10} 个客户</li>` : ''}</ul>
+        <p class="muted">删除后无法撤销${IS_CLOUD_MODE ? '，云端数据会同步删除' : ''}。</p>
+    `;
+    document.getElementById('batchDeleteBackup').checked = true;
+    document.getElementById('batchDeleteConfirmInput').value = '';
+    document.getElementById('batchDeleteConfirmBtn').disabled = true;
+    document.getElementById('batchDeleteModal').style.display = 'block';
+    setTimeout(() => document.getElementById('batchDeleteConfirmInput').focus(), 50);
+}
+
+function closeBatchDeleteModal() {
+    document.getElementById('batchDeleteModal').style.display = 'none';
+}
+
+function confirmBatchDelete() {
+    if (document.getElementById('batchDeleteConfirmInput').value.trim() !== '删除') return;
+    const selected = getSelectedEntries().filter(entry => canEditCustomer(entry.customer));
+    if (!selected.length) return;
+
+    if (document.getElementById('batchDeleteBackup').checked) {
+        exportRecords('xlsx', selected, { fileBaseName: `删除前备份_${todayStr()}`, silent: true });
+    }
+
+    const ids = new Set(selected.map(entry => entry.device.id));
+    const touched = new Set(selected.map(entry => entry.customer.id));
+    customers.forEach(customer => {
+        if (touched.has(customer.id)) customer.devices = customer.devices.filter(device => !ids.has(device.id));
+    });
+    const before = customers.length;
+    customers = customers.filter(customer => !(touched.has(customer.id) && customer.devices.length === 0));
+    const removedCustomers = before - customers.length;
+
+    selectedDeviceIds.clear();
+    saveCustomersToStorage();
+    refreshAll();
+    closeBatchDeleteModal();
+    alert(`已删除 ${ids.size} 条装机记录${removedCustomers ? `、${removedCustomers} 个客户` : ''}。`);
 }
 
 function renderDeviceCard({ customer, device }) {
@@ -2179,6 +2320,7 @@ function renderDeviceCard({ customer, device }) {
         <div class="customer-item due-${due.level}" data-device-id="${device.id}">
             <div class="customer-header">
                 <div class="customer-title">
+                    <input type="checkbox" class="record-select" data-device-id="${device.id}" title="选择这条记录"${selectedDeviceIds.has(device.id) ? ' checked' : ''}>
                     <h3>${escapeHtml(customer.name)}</h3>
                     ${badges}
                 </div>

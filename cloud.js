@@ -1,12 +1,15 @@
 // 腾讯云开发 CloudBase 数据层：登录、客户数据同步、成员角色
-// 只有在 config.js 中填写了 cloudbaseEnv 时才会启用；数据权限由云端“安全规则”保证（见 cloudbase/ 目录）
+// 只有在 config.js 中填写了 cloudbaseEnv 时才会启用；数据存放在云开发 PostgreSQL，
+// 数据权限由数据库的 RLS 行级安全策略保证（见 cloudbase/schema.sql）
 const CloudStore = (() => {
-    const SDK_URL = 'https://static.cloudbase.net/cloudbase-js-sdk/2.27.1/cloudbase.full.js';
-    const PAGE_SIZE = 100; // Web SDK 单次查询最多返回 100 条
+    // 必须用 v3：新建环境的账号在 {env}.api.tcloudbasegateway.com 网关上，
+    // v2 SDK 连接的是旧网关，登录会一直返回“用户名或密码不正确”
+    const SDK_URL = 'https://static.cloudbase.net/cloudbase-js-sdk/3.10.4/cloudbase.full.js';
+    const PAGE_SIZE = 500;
     const MAX_CONCURRENT_WRITES = 5;
 
     let auth = null;
-    let db = null;
+    let rdb = null;
     const syncedJson = new Map(); // 客户ID → 上次成功写入云端时的 JSON，用于只上传有变化的客户
     let syncing = false;
     let syncQueued = false;
@@ -27,7 +30,7 @@ const CloudStore = (() => {
         if (typeof cloudbase === 'undefined') await loadScript(SDK_URL);
         const app = cloudbase.init({ env: config.cloudbaseEnv, region: config.cloudbaseRegion || 'ap-shanghai' });
         auth = typeof app.auth === 'function' ? app.auth({ persistence: 'local' }) : app.auth;
-        db = app.database();
+        rdb = app.rdb();
     }
 
     // 兼容 SDK 不同版本的返回值：{ data, error } 或直接抛出异常
@@ -40,7 +43,7 @@ const CloudStore = (() => {
     function describeError(error) {
         const code = String(error.code || error.error || '');
         if (/password|credential|invalid_grant|not_found|user_not/i.test(code + (error.message || ''))) return '用户名或密码错误';
-        if (/PERMISSION_DENIED/i.test(code)) return '没有权限访问这些数据';
+        if (/PERMISSION_DENIED|42501|row-level security|permission denied/i.test(code + (error.message || ''))) return '没有权限访问这些数据';
         return error.message || error.error_description || code || '未知错误';
     }
 
@@ -55,15 +58,20 @@ const CloudStore = (() => {
     // 当前登录用户；未登录或匿名登录时返回 null
     async function getCurrentUser() {
         if (typeof auth.getSession === 'function') {
-            const data = unwrap(await auth.getSession());
-            const session = data && data.session;
-            if (!session) return null;
-            const user = readUser(session.user);
-            if (user) return user;
+            try {
+                const result = await auth.getSession();
+                const session = result && result.data && result.data.session;
+                const user = session && readUser(session.user);
+                if (user) return user;
+            } catch (error) {
+                // 未登录时部分 SDK 版本会报错，按“未登录”处理
+            }
         }
         if (typeof auth.getUser === 'function') {
-            const data = unwrap(await auth.getUser());
-            const user = readUser(data && data.user ? data.user : data);
+            const result = await auth.getUser();
+            if (result && result.error) return null;
+            const data = result && 'data' in result ? result.data : result;
+            const user = readUser(data && 'user' in data ? data.user : data);
             if (user) return user;
         }
         return readUser(auth.currentUser);
@@ -97,52 +105,58 @@ const CloudStore = (() => {
     }
 
     // ---------- 成员与角色 ----------
-    // members 集合：文档ID = 用户 uid，{ uid, username, role: 'admin' | 'member' }；角色只有管理员能修改
+    // members 表：{ uid, username, role: 'admin' | 'member', created_at }；角色只有管理员能修改
+    function toMember(row) {
+        return { uid: row.uid, username: row.username, role: row.role, createdAt: row.created_at };
+    }
+    
     async function loadMember(user) {
-        const rows = unwrap(await db.collection('members').where({ uid: '{openid}' }).get());
-        if (rows && rows.length) return rows[0];
-
-        // 第一次登录：登记为普通成员（安全规则只允许本人以 member 身份创建）
-        const member = { uid: user.uid, username: user.username, role: 'member', createdAt: new Date().toISOString() };
+        const rows = unwrap(await rdb.from('members').select('*').eq('uid', user.uid));
+        if (rows && rows.length) return toMember(rows[0]);
+        
+        // 第一次登录：登记为普通成员（RLS 只允许本人以 member 身份登记）
+        const member = { uid: user.uid, username: user.username, role: 'member' };
         try {
-            unwrap(await db.collection('members').add({ _id: user.uid, ...member }));
+            unwrap(await rdb.from('members').insert(member));
         } catch (error) {
             console.warn('登记成员信息失败:', error);
         }
-        return member;
+        return { ...member, createdAt: new Date().toISOString() };
     }
-
+    
     async function listMembers() {
-        return fetchAll(db.collection('members'));
+        return (await fetchAll('members', 'uid', '*')).map(toMember);
     }
-
+    
     async function setMemberRole(uid, role) {
-        unwrap(await db.collection('members').doc(uid).update({ role }));
+        // RLS 拒绝的 UPDATE 不会报错，只是影响 0 行，所以用返回的行判断是否成功
+        const rows = unwrap(await rdb.from('members').update({ role }).eq('uid', uid).select('uid'));
+        if (!rows || !rows.length) throw new Error('没有权限修改该成员的角色');
     }
-
+    
     // ---------- 客户数据 ----------
-    async function fetchAll(query) {
+    async function fetchAll(table, orderColumn, columns) {
         const all = [];
-        for (let skip = 0; ; skip += PAGE_SIZE) {
-            const rows = unwrap(await query.skip(skip).limit(PAGE_SIZE).get()) || [];
+        for (let from = 0; ; from += PAGE_SIZE) {
+            const rows = unwrap(await rdb.from(table).select(columns).order(orderColumn, { ascending: true }).range(from, from + PAGE_SIZE - 1)) || [];
             all.push(...rows);
             if (rows.length < PAGE_SIZE) break;
         }
         return all;
     }
-
-    // 普通成员只查询自己的客户（查询条件必须与安全规则一致），管理员查询全部
-    async function loadCustomers(isAdmin) {
-        const collection = db.collection('customers');
-        const docs = await fetchAll(isAdmin ? collection : collection.where({ userId: '{openid}' }));
+    
+    // RLS 自动过滤：普通成员只会拿到自己的客户，管理员拿到全部
+    // normalize 用于补齐默认字段，使“已同步内容”与页面中的数据完全一致
+    async function loadCustomers(normalize = customer => customer) {
+        const rows = await fetchAll('customers', 'id', 'id,user_id,data');
         syncedJson.clear();
-        return docs.map(doc => {
-            const { _id, _openid, ...customer } = doc;
+        return rows.map(row => {
+            const customer = normalize({ ...row.data, userId: row.user_id });
             syncedJson.set(String(customer.id), JSON.stringify(customer));
             return customer;
         });
     }
-
+    
     async function runLimited(tasks, limit) {
         const errors = [];
         let index = 0;
@@ -160,19 +174,22 @@ const CloudStore = (() => {
         if (errors.length) throw errors[0];
     }
 
-    // 新客户用 add（安全规则校验写入的 userId 必须是本人），已有客户用 update（安全规则校验云端原记录的负责人）。
-    // 不使用 set：避免有人用自己的 userId 覆盖别人的客户文档
-    async function writeCustomer(collection, id, data, isNew) {
+    // 新客户 INSERT（RLS 要求负责人 user_id 是本人）；已有客户只 UPDATE 内容，不修改负责人。
+    // RLS 拒绝的 UPDATE / DELETE 不会报错，只会影响 0 行，所以通过返回的行判断是否真正写入
+    async function writeCustomer(id, customer, isNew) {
+        const updatedAt = new Date().toISOString();
         if (isNew) {
-            try {
-                unwrap(await collection.add({ _id: id, ...data }));
-                return;
-            } catch (error) {
-                // 上一次同步可能已经创建成功但没收到响应，改为更新
-                console.warn('新增客户失败，尝试更新:', error);
-            }
+            const result = await rdb.from('customers').insert({ id, user_id: customer.userId, data: customer, updated_at: updatedAt });
+            if (!result.error) return;
+            // 上一次同步可能已经创建成功但没收到响应，改为更新
+            console.warn('新增客户失败，尝试更新:', result.error);
         }
-        unwrap(await collection.doc(id).update(data));
+        const rows = unwrap(await rdb.from('customers').update({ data: customer, updated_at: updatedAt }).eq('id', id).select('id'));
+        if (!rows || !rows.length) throw new Error('没有权限保存该客户，或该客户已在云端被删除');
+    }
+    
+    async function deleteCustomer(id) {
+        unwrap(await rdb.from('customers').delete().eq('id', id));
     }
     
     // 把内存中的客户列表与云端对比：只上传有变化的客户、删除已删除的客户
@@ -186,21 +203,20 @@ const CloudStore = (() => {
         statusListener('saving');
 
         try {
-            const collection = db.collection('customers');
             const current = new Map(getCustomers().map(customer => [String(customer.id), JSON.stringify(customer)]));
             const tasks = [];
             current.forEach((json, id) => {
                 if (syncedJson.get(id) === json) return;
                 const isNew = !syncedJson.has(id);
                 tasks.push(async () => {
-                    await writeCustomer(collection, id, JSON.parse(json), isNew);
+                    await writeCustomer(id, JSON.parse(json), isNew);
                     syncedJson.set(id, json);
                 });
             });
             syncedJson.forEach((json, id) => {
                 if (current.has(id)) return;
                 tasks.push(async () => {
-                    unwrap(await collection.doc(id).remove());
+                    await deleteCustomer(id);
                     syncedJson.delete(id);
                 });
             });

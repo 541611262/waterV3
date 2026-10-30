@@ -253,6 +253,17 @@
             </div>
 
             <div id="recordCount" class="record-count"></div>
+
+            <!-- 批量操作栏 -->
+            <div id="batchBar" class="batch-bar">
+                <label class="batch-select-all"><input type="checkbox" id="selectAllVisible"> 全选当前列表</label>
+                <span id="batchSummary" class="batch-summary">未选择记录</span>
+                <div class="batch-actions">
+                    <button type="button" id="batchExportBtn" disabled>导出所选</button>
+                    <button type="button" id="batchClearBtn" class="secondary-btn" disabled>取消选择</button>
+                    <button type="button" id="batchDeleteBtn" class="danger-btn" disabled>删除所选</button>
+                </div>
+            </div>
             <div id="reminderList" class="reminder-list">
                 <!-- 客户列表将在这里动态生成 -->
             </div>
@@ -306,6 +317,28 @@
                     <button type="button" id="saveDeviceBtn">保存</button>
                     <div id="editDeviceError" class="error-message"></div>
                 </form>
+            </div>
+        </div>
+
+        <!-- 批量删除确认（点击弹窗外部不会关闭，必须输入“删除”才能确认） -->
+        <div id="batchDeleteModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <span class="close-batch-delete">&times;</span>
+                <h2 class="danger-text">⚠️ 批量删除</h2>
+                <div id="batchDeleteSummary"></div>
+                <div class="form-group">
+                    <label class="inline-label">
+                        <input type="checkbox" id="batchDeleteBackup" checked> 删除前先把这些记录导出为 Excel 备份（推荐）
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label for="batchDeleteConfirmInput">请输入 <strong class="danger-text">删除</strong> 两个字以确认：</label>
+                    <input type="text" id="batchDeleteConfirmInput" autocomplete="off" placeholder="删除">
+                </div>
+                <div class="batch-modal-actions">
+                    <button type="button" id="batchDeleteCancelBtn" class="secondary-btn">取消</button>
+                    <button type="button" id="batchDeleteConfirmBtn" class="danger-btn" disabled>确认删除</button>
+                </div>
             </div>
         </div>
 

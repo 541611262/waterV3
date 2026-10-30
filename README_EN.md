@@ -6,7 +6,7 @@ A web application to track and remind customers when to replace their water filt
 
 ### Accounts
 - **Local mode** (default): data stays in the current browser; an admin account is created on first launch, then regular accounts can register; password recovery via security question. Passwords and answers are stored as salted PBKDF2 hashes, never in plain text
-- **Cloud mode**: colleagues sign in to the same site with their own accounts; members see only their own customers, admins see everything. Accounts are created by the admin in the Tencent CloudBase console and access is enforced by server-side security rules. See [DEPLOY.md](DEPLOY.md) (Chinese)
+- **Cloud mode**: colleagues sign in to the same site with their own accounts; members see only their own customers, admins see everything. Accounts are created by the admin in the Tencent CloudBase console and access is enforced by PostgreSQL row-level security (RLS). See [DEPLOY.md](DEPLOY.md) (Chinese)
 - Change password; admin user-management panel (promote / demote)
 
 ### Customer Management (customer → installation records)
@@ -17,6 +17,7 @@ A web application to track and remind customers when to replace their water filt
 - Search (name / contact / phone / address / model); filter by region, flags (unpaid / water test / long-term partner) and month
 - Next replacement date = latest of installation date, filter purchase date and replacement records + interval (default 90 days)
 - Replacement records (per installation) and follow-up records (per customer): add, edit, view
+- Bulk actions: select records (or everything in the current filtered list) to export or delete in one go; deletion requires typing a confirmation word and exports an Excel backup first by default
 
 ### Reminders
 - Dashboard: overdue / this week / this month / next month, plus payments to chase, each list exportable
@@ -53,7 +54,7 @@ In `examples/`:
 ## Technical Details
 
 - Frontend: HTML5, CSS3, JavaScript
-- Data storage: browser localStorage (local mode) or Tencent CloudBase document database (cloud mode; `cloud.js`, rules in `cloudbase/`)
+- Data storage: browser localStorage (local mode) or Tencent CloudBase PostgreSQL (cloud mode; `cloud.js`, schema and RLS policies in `cloudbase/schema.sql`)
 - Excel parsing: SheetJS 0.20.3 bundled in `vendor/` (no overseas CDN)
 - In local mode, data stays in the current browser and does not sync across devices — export backups regularly
 - When upgrading, existing data is converted to the customer → installation structure automatically; the old data is kept in the browser as a backup
