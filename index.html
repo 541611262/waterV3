@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>滤芯更换提醒系统 V3</title>
     <link rel="stylesheet" href="style.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Excel 解析库放在本项目中，不依赖境外 CDN -->
+    <script src="vendor/xlsx.full.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -25,7 +26,8 @@
                     <button type="submit" id="loginBtn">登录</button>
                     <div id="loginError" class="error-message"></div>
                 </form>
-                <p><a href="#" id="showRegisterLink">注册新账户</a> | <a href="#" id="showRecoveryLink">忘记密码？</a></p>
+                <p class="local-only"><a href="#" id="showRegisterLink">注册新账户</a> | <a href="#" id="showRecoveryLink">忘记密码？</a></p>
+                <p class="cloud-only section-hint">账号由管理员创建。忘记密码请联系管理员在云开发控制台重置。</p>
             </div>
         </div>
 
@@ -106,6 +108,7 @@
                 <h1>滤芯更换提醒系统 V3</h1>
                 <div class="user-info">
                     <span>欢迎, <span id="currentUsername"></span> (<span id="currentUserRole"></span>)</span>
+                    <span id="syncStatus" class="sync-status cloud-only" title=""></span>
                     <div class="user-actions">
                         <div class="notification-center">
                             <button id="notificationBtn" class="notification-btn">
@@ -134,11 +137,11 @@
                 <div class="dashboard-grid">
                     <div class="dashboard-card urgent">
                         <div class="card-header">
-                            <h3>🚨 今日到期</h3>
+                            <h3>🚨 已到期 / 今日</h3>
                             <span id="todayCount" class="count">0</span>
                         </div>
                         <div id="todayList" class="customer-list"></div>
-                        <button id="exportTodayBtn" class="export-btn">导出今日列表</button>
+                        <button id="exportTodayBtn" class="export-btn">导出已到期列表</button>
                     </div>
                     
                     <div class="dashboard-card warning">
@@ -167,105 +170,101 @@
                         <div id="nextMonthList" class="customer-list"></div>
                         <button id="exportNextMonthBtn" class="export-btn">导出下月列表</button>
                     </div>
+
+                    <div class="dashboard-card unpaid">
+                        <div class="card-header">
+                            <h3>💰 待催收款</h3>
+                            <span id="unpaidCount" class="count">0</span>
+                        </div>
+                        <div id="unpaidList" class="customer-list"></div>
+                        <button id="exportUnpaidBtn" class="export-btn">导出催款列表</button>
+                    </div>
                 </div>
             </div>
             
-            <div class="input-section">
-                <h2>添加新客户</h2>
-                <form id="customerForm">
-                    <div class="form-group">
-                        <label for="customerName">客户名称:</label>
-                        <input type="text" id="customerName" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="contactPerson">联系人:</label>
-                        <input type="text" id="contactPerson" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="phoneNumber">联系电话:</label>
-                        <input type="tel" id="phoneNumber" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="region">区域:</label>
-                        <input type="text" id="region">
-                    </div>
-                    <div class="form-group">
-                        <label for="filterPurchaseDate">上次滤芯购买日期:</label>
-                        <input type="date" id="filterPurchaseDate" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="customInterval">自定义间隔(天):</label>
-                        <input type="number" id="customInterval" placeholder="留空使用默认间隔">
-                    </div>
-                    <div class="form-group">
-                        <label for="notes">备注:</label>
-                        <textarea id="notes" rows="3"></textarea>
-                    </div>
-                    <button type="button" id="addCustomer">添加客户</button>
+            <details class="input-section add-section">
+                <summary>➕ 添加客户 / 装机记录</summary>
+                <p class="section-hint">一个客户可以有多条装机记录（不同地址、型号或批次）。客户名称与已有客户相同时，新记录会添加到该客户下。</p>
+                <form id="customerForm" onsubmit="return false;">
+                    <div id="addRecordFields"></div>
+                    <div id="addCustomerHint" class="section-hint highlight-hint"></div>
+                    <button type="button" id="addCustomer">添加记录</button>
                 </form>
-            </div>
+                <datalist id="customerNameOptions"></datalist>
+            </details>
 
             <div class="filter-section">
                 <h2>客户管理</h2>
                 <div class="filter-controls">
                     <div class="filter-group">
-                        <label for="customerSearch">搜索客户:</label>
-                        <input type="text" id="customerSearch" placeholder="输入客户名称、联系人或电话">
+                        <label for="customerSearch">搜索:</label>
+                        <input type="text" id="customerSearch" placeholder="客户名称、联系人、电话、地址、型号">
                     </div>
                     <div class="filter-group">
-                        <label for="regionFilter">区域筛选:</label>
-                        <select id="regionFilter">
-                            <option value="">全部区域</option>
-                        </select>
+                        <label>区域筛选:</label>
+                        <div id="regionFilter" class="multi-select" data-all-label="全部区域"></div>
                     </div>
                     <div class="filter-group">
-                        <label for="followupMonthFilter">跟进月份:</label>
-                        <select id="followupMonthFilter">
-                            <option value="">全部月份</option>
-                            <option value="1">1月</option>
-                            <option value="2">2月</option>
-                            <option value="3">3月</option>
-                            <option value="4">4月</option>
-                            <option value="5">5月</option>
-                            <option value="6">6月</option>
-                            <option value="7">7月</option>
-                            <option value="8">8月</option>
-                            <option value="9">9月</option>
-                            <option value="10">10月</option>
-                            <option value="11">11月</option>
-                            <option value="12">12月</option>
-                        </select>
+                        <label>标记筛选:</label>
+                        <div id="statusFilter" class="multi-select" data-all-label="全部"></div>
+                    </div>
+                    <div class="filter-group">
+                        <label>跟进月份:</label>
+                        <div id="followupMonthFilter" class="multi-select" data-all-label="全部月份"></div>
                     </div>
                     <div class="filter-group">
                         <label for="sortOrder">排序方式:</label>
                         <select id="sortOrder">
-                            <option value="desc">从新到旧</option>
-                            <option value="asc">从旧到新</option>
+                            <option value="desc">建议更换日期 从新到旧</option>
+                            <option value="asc">建议更换日期 从旧到新</option>
+                            <option value="name">按客户名称</option>
                         </select>
                     </div>
                     <div class="filter-group">
                         <label>
-                            <input type="checkbox" id="showAll"> 显示所有客户
+                            <input type="checkbox" id="showAll"> 显示所有记录
                         </label>
+                        <small class="muted">不勾选时只显示滤芯已到期或该催款的记录</small>
                     </div>
                 </div>
             </div>
 
             <div class="import-export-section">
                 <h3>数据导入导出</h3>
+                <p class="section-hint">导入导出格式与《格式样板》一致（19 列，一行一条装机记录），支持 .xlsx / .xls / .csv。</p>
                 <div class="import-export-controls">
                     <div class="import-group">
                         <input type="file" id="csvFile" accept=".csv,.xlsx,.xls">
                         <button id="importBtn">导入数据</button>
-                        <button id="downloadSample">下载示例文件</button>
+                        <button id="downloadSample">下载导入模板</button>
                     </div>
                     <div class="export-group">
-                        <button id="exportBtn">导出客户数据</button>
+                        <button id="exportBtn">导出 Excel（样板格式）</button>
+                        <button id="exportCsvBtn" class="secondary-btn">导出 CSV</button>
+                        <button id="exportHistoryBtn" class="secondary-btn">导出换芯记录明细</button>
                     </div>
                 </div>
                 <div id="importStatus" class="status-message"></div>
+                <div id="localDataNotice" class="local-data-notice cloud-only" style="display: none;">
+                    <p class="local-data-summary"></p>
+                    <button id="uploadLocalDataBtn">上传到我的云端账号</button>
+                    <button id="clearLocalDataBtn" class="secondary-btn">清除本机数据</button>
+                </div>
             </div>
 
+            <div id="recordCount" class="record-count"></div>
+
+            <!-- 批量操作栏 -->
+            <div id="batchBar" class="batch-bar">
+                <label class="batch-select-all"><input type="checkbox" id="selectAllVisible"> 全选当前列表</label>
+                <button type="button" id="selectEverythingBtn" class="link-btn" style="display: none;"></button>
+                <span id="batchSummary" class="batch-summary">未选择记录</span>
+                <div class="batch-actions">
+                    <button type="button" id="batchExportBtn" disabled>导出所选</button>
+                    <button type="button" id="batchClearBtn" class="secondary-btn" disabled>取消选择</button>
+                    <button type="button" id="batchDeleteBtn" class="danger-btn" disabled>删除所选</button>
+                </div>
+            </div>
             <div id="reminderList" class="reminder-list">
                 <!-- 客户列表将在这里动态生成 -->
             </div>
@@ -300,37 +299,71 @@
             <div class="modal-content">
                 <span class="close-edit">&times;</span>
                 <h2>编辑客户信息</h2>
-                <form>
-                    <div class="form-group">
-                        <label for="editCustomerName">客户名称:</label>
-                        <input type="text" id="editCustomerName" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="editContactPerson">联系人:</label>
-                        <input type="text" id="editContactPerson" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="editPhoneNumber">联系电话:</label>
-                        <input type="tel" id="editPhoneNumber" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="editRegion">区域:</label>
-                        <input type="text" id="editRegion">
-                    </div>
-                    <div class="form-group">
-                        <label for="editFilterPurchaseDate">上次滤芯购买日期:</label>
-                        <input type="date" id="editFilterPurchaseDate" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="editCustomInterval">自定义间隔(天):</label>
-                        <input type="number" id="editCustomInterval" placeholder="留空使用默认间隔">
-                    </div>
-                    <div class="form-group">
-                        <label for="editNotes">备注:</label>
-                        <textarea id="editNotes" rows="3"></textarea>
-                    </div>
+                <p class="section-hint">客户信息由该客户的所有装机记录共用。</p>
+                <form onsubmit="return false;">
+                    <div id="editCustomerFields"></div>
                     <button type="button" id="saveCustomerBtn">保存</button>
                     <div id="editCustomerError" class="error-message"></div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 编辑装机记录模态框 -->
+        <div id="editDeviceModal" class="modal" style="display: none;">
+            <div class="modal-content large-modal">
+                <span class="close-edit-device">&times;</span>
+                <h2 id="editDeviceTitle">编辑装机记录</h2>
+                <form onsubmit="return false;">
+                    <div id="editDeviceFields"></div>
+                    <button type="button" id="saveDeviceBtn">保存</button>
+                    <div id="editDeviceError" class="error-message"></div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 批量删除确认（点击弹窗外部不会关闭，必须输入“删除”才能确认） -->
+        <div id="batchDeleteModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <span class="close-batch-delete">&times;</span>
+                <h2 class="danger-text">⚠️ 批量删除</h2>
+                <div id="batchDeleteSummary"></div>
+                <div class="form-group">
+                    <label class="inline-label">
+                        <input type="checkbox" id="batchDeleteBackup" checked> 删除前先把这些记录导出为 Excel 备份（推荐）
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label for="batchDeleteConfirmInput">请输入 <strong class="danger-text">删除</strong> 两个字以确认：</label>
+                    <input type="text" id="batchDeleteConfirmInput" autocomplete="off" placeholder="删除">
+                </div>
+                <div class="batch-modal-actions">
+                    <button type="button" id="batchDeleteCancelBtn" class="secondary-btn">取消</button>
+                    <button type="button" id="batchDeleteConfirmBtn" class="danger-btn" disabled>确认删除</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 添加跟踪记录模态框 -->
+        <div id="followUpModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <span class="close-followup">&times;</span>
+                <h2 id="followUpModalTitle">添加跟踪记录</h2>
+                <form onsubmit="return false;">
+                    <div class="form-group">
+                        <label for="followUpDate">跟踪日期:</label>
+                        <input type="date" id="followUpDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="followUpContent">跟踪内容:</label>
+                        <textarea id="followUpContent" rows="4" placeholder="例如：电话回访，约下周三上门换芯；催款，对方答应月底付款"></textarea>
+                    </div>
+                    <div class="form-group" id="followUpClearUnpaidGroup">
+                        <label class="inline-label">
+                            <input type="checkbox" id="followUpClearUnpaid"> 已收清款项（取消该客户所有“未收款”标记）
+                        </label>
+                    </div>
+                    <button type="button" id="saveFollowUpBtn">保存跟踪记录</button>
+                    <div id="followUpError" class="error-message"></div>
                 </form>
             </div>
         </div>
@@ -350,7 +383,7 @@
         <div id="addReplacementModal" class="modal" style="display: none;">
             <div class="modal-content">
                 <span class="close-replacement">&times;</span>
-                <h2>添加更换记录</h2>
+                <h2>记录换芯</h2>
                 <form>
                     <div class="form-group">
                         <label for="replacementDate">更换日期:</label>
@@ -430,6 +463,12 @@
                             <!-- 今日到期列表 -->
                         </div>
                     </div>
+                    <div id="unpaidReminders" class="today-section">
+                        <h3>💰 待催收款</h3>
+                        <div id="unpaidReminderList" class="reminder-customer-list">
+                            <!-- 催款提醒 -->
+                        </div>
+                    </div>
                     <div id="weekReminders" class="week-section">
                         <h3>📊 本周概览</h3>
                         <div id="weekReminderList" class="reminder-customer-list">
@@ -448,6 +487,8 @@
         </div>
     </div>
 
+    <script src="config.js"></script>
+    <script src="cloud.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
