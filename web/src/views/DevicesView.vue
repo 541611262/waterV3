@@ -1,15 +1,20 @@
 <script setup lang="ts">
-import { Grid, List, Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { ArrowDown, Download, Grid, List, Plus, Refresh, Search, Upload } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { refDebounced, useMediaQuery, useStorage } from '@vueuse/core'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { DEVICE_STATUSES, listDevices, listRegions, type DeviceStatusKey } from '@/api/data'
+import { describeError } from '@/api/cloud'
+import { DEVICE_STATUSES, listDevices, listRegions, softDelete, type DeviceStatusKey } from '@/api/data'
+import { collectExportEntries, downloadWorkbook } from '@/api/importExport'
 import type { DeviceOverview } from '@/api/types'
 import DeviceFormDialog from '@/components/DeviceFormDialog.vue'
 import DueTag from '@/components/DueTag.vue'
+import ImportDialog from '@/components/ImportDialog.vue'
 import PhoneLinks from '@/components/PhoneLinks.vue'
 import ReplacementFormDialog from '@/components/ReplacementFormDialog.vue'
 import { usePagedList } from '@/composables/usePagedList'
+import { todayStr } from '@/lib/dates'
 import { useSessionStore } from '@/stores/session'
 
 const session = useSessionStore()
@@ -56,6 +61,86 @@ function openDetail(row: DeviceOverview) {
   void router.push(`/customers/${row.client_id}`)
 }
 
+// ---------- 导入导出与批量操作 ----------
+const importDialog = ref(false)
+const exporting = ref(false)
+const selected = ref<DeviceOverview[]>([])
+const tableRef = ref<{ clearSelection: () => void }>()
+
+function currentFilter() {
+  return {
+    keyword: keywordDebounced.value,
+    statuses: statuses.value,
+    ownerId: ownerId.value || undefined,
+    region: region.value || undefined,
+  }
+}
+
+async function exportDevices(scope: 'all' | 'filtered' | 'selected') {
+  exporting.value = true
+  try {
+    let entries
+    if (scope === 'selected') {
+      entries = await collectExportEntries({ ids: selected.value.map((d) => d.id) })
+    } else if (scope === 'filtered') {
+      const ids: string[] = []
+      for (let page = 1; ; page++) {
+        const result = await listDevices({ ...currentFilter(), page, pageSize: 1000 })
+        ids.push(...result.rows.map((r) => r.id))
+        if (ids.length >= result.total || !result.rows.length) break
+      }
+      entries = await collectExportEntries({ ids })
+    } else {
+      entries = await collectExportEntries({ includeEmptyClients: true })
+    }
+    if (!entries.length) {
+      ElMessage.warning('没有可导出的数据')
+      return
+    }
+    const suffix = scope === 'all' ? '' : scope === 'selected' ? '_所选' : '_筛选结果'
+    downloadWorkbook(entries, `滤芯客户数据${suffix}_${todayStr()}`)
+    ElMessage.success(`已导出 ${entries.length} 行，可直接重新导入`)
+  } catch (error) {
+    ElMessage.error(describeError(error))
+  } finally {
+    exporting.value = false
+  }
+}
+
+async function deleteSelected() {
+  const rows = selected.value
+  if (!rows.length) return
+  const message = `删除选中的 ${rows.length} 条装机记录？删除后可以在「设置 → 回收站」中恢复。`
+  try {
+    if (rows.length > 5) {
+      await ElMessageBox.prompt(`${message}
+为防止误操作，请输入「删除」确认。`, '批量删除', {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        inputPattern: /^删除$/,
+        inputErrorMessage: '请输入「删除」',
+        type: 'warning',
+      })
+    } else {
+      await ElMessageBox.confirm(message, '批量删除', { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' })
+    }
+  } catch {
+    return
+  }
+  let failed = 0
+  for (const row of rows) {
+    try {
+      await softDelete('devices', row.id, row.version)
+    } catch {
+      failed++
+    }
+  }
+  if (failed) ElMessage.warning(`已删除 ${rows.length - failed} 条，${failed} 条失败（可能刚被别人修改或没有权限），请刷新后重试`)
+  else ElMessage.success(`已删除 ${rows.length} 条，可在回收站恢复`)
+  tableRef.value?.clearSelection()
+  await list.load()
+}
+
 function clearFilters() {
   keyword.value = ''
   statuses.value = []
@@ -86,6 +171,16 @@ onMounted(async () => {
           <el-radio-button value="card"><el-icon><Grid /></el-icon></el-radio-button>
         </el-radio-group>
         <el-button :icon="Refresh" @click="list.load()" />
+        <el-button :icon="Upload" @click="importDialog = true">导入</el-button>
+        <el-dropdown trigger="click" @command="exportDevices">
+          <el-button :icon="Download" :loading="exporting">导出<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="filtered">导出当前筛选结果</el-dropdown-item>
+              <el-dropdown-item command="all">导出全部（含没有装机记录的客户）</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <el-button type="primary" :icon="Plus" @click="deviceDialog = true">新增</el-button>
       </div>
       <div class="status-row">
@@ -98,15 +193,24 @@ onMounted(async () => {
     </el-card>
 
     <el-card v-loading="list.loading.value" shadow="never" class="content">
+      <div v-if="selected.length" class="batch-bar">
+        <span>已选 {{ selected.length }} 条</span>
+        <el-button size="small" :loading="exporting" @click="exportDevices('selected')">导出所选</el-button>
+        <el-button size="small" type="danger" plain @click="deleteSelected">删除所选</el-button>
+        <el-button size="small" link @click="tableRef?.clearSelection()">取消选择</el-button>
+      </div>
       <template v-if="effectiveView === 'table'">
         <el-table
+          ref="tableRef"
           :data="list.rows.value"
           row-key="id"
           :default-sort="{ prop: 'next_due_on', order: 'ascending' }"
           empty-text="没有符合条件的装机记录"
           @sort-change="list.onSortChange"
           @row-dblclick="openDetail"
+          @selection-change="(rows: DeviceOverview[]) => (selected = rows)"
         >
+          <el-table-column type="selection" width="42" />
           <el-table-column prop="client_name" label="客户" min-width="160" sortable="custom" show-overflow-tooltip>
             <template #default="{ row }">
               <router-link :to="`/customers/${row.client_id}`" class="link">{{ row.client_name }}</router-link>
@@ -195,6 +299,7 @@ onMounted(async () => {
     </el-card>
 
     <DeviceFormDialog v-model="deviceDialog" @saved="list.load()" />
+    <ImportDialog v-model="importDialog" @imported="list.load()" />
     <ReplacementFormDialog v-model="replacementDialog" :device="current" @saved="list.load()" />
   </div>
 </template>
@@ -246,6 +351,16 @@ onMounted(async () => {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+.batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  background: var(--el-color-primary-light-9);
+  border-radius: 6px;
+  font-size: 13px;
 }
 .pager {
   margin-top: 12px;

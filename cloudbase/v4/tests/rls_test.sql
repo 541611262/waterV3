@@ -10,7 +10,8 @@ INSERT INTO public.members (uid, username, role) VALUES
     ('t_admin', '测试管理员', 'admin'),
     ('t_a', '成员甲', 'member'),
     ('t_b', '成员乙', 'member'),
-    ('t_c', '成员丙', 'member');
+    ('t_c', '成员丙', 'member'),
+    ('t_r', '成员丁', 'member');
 
 -- ===== 成员甲：新建客户、设备 =====
 SELECT set_config('request.jwt.claims', '{"sub":"t_a"}', true);
@@ -21,6 +22,22 @@ VALUES ('00000000-0000-0000-0000-0000000000a1', '甲的客户', '深圳', '2000-
 
 INSERT INTO public.devices (id, client_id, address, phone, install_date)
 VALUES ('00000000-0000-0000-0000-00000000ad01', '00000000-0000-0000-0000-0000000000a1', 'A栋', '13800000000', '2026-01-01');
+
+-- 网页端新增都用 INSERT ... RETURNING（.insert().select()），必须能读回刚插入的行（用单独的账号，不影响后面的计数）
+RESET ROLE;
+SELECT set_config('request.jwt.claims', '{"sub":"t_r"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE v uuid;
+BEGIN
+    INSERT INTO public.clients (name) VALUES ('读回测试') RETURNING id INTO v;
+    INSERT INTO public.devices (client_id, address) VALUES (v, '读回设备') RETURNING id INTO v;
+    INSERT INTO public.replacements (device_id, replaced_on) VALUES (v, '2026-01-01') RETURNING id INTO v;
+    IF v IS NULL THEN RAISE EXCEPTION 'FAIL: 新增后应能读回'; END IF;
+END $$;
+RESET ROLE;
+SELECT set_config('request.jwt.claims', '{"sub":"t_a"}', true);
+SET LOCAL ROLE authenticated;
 
 DO $$ BEGIN
     IF (SELECT owner_id FROM public.clients WHERE id = '00000000-0000-0000-0000-0000000000a1') <> 't_a' THEN

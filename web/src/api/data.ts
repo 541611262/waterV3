@@ -454,3 +454,95 @@ export async function dashboardStats(uid: string): Promise<DashboardStats> {
     revenueThisMonth: monthRows.reduce((sum: number, r: { cost: number | string }) => sum + Number(r.cost || 0), 0),
   }
 }
+
+// ---------- 回收站（统一格式） ----------
+
+export interface DeletedItem {
+  table: SoftDeletable
+  id: string
+  version: number
+  title: string
+  subtitle: string
+  deleted_at: string
+  updated_by: string | null
+}
+
+const DELETED_SOURCES: { table: SoftDeletable; select: string; describe: (row: Record<string, unknown>) => [string, string] }[] = [
+  { table: 'clients', select: 'id, version, deleted_at, updated_by, name, region', describe: (r) => [String(r.name), String(r.region ?? '')] },
+  {
+    table: 'devices',
+    select: 'id, version, deleted_at, updated_by, address, location, model, clients(name)',
+    describe: (r) => [String(r.address || r.location || r.model || '（未填地址）'), clientName(r)],
+  },
+  {
+    table: 'replacements',
+    select: 'id, version, deleted_at, updated_by, replaced_on, filter_model, clients(name)',
+    describe: (r) => [`换芯 ${r.replaced_on ?? ''} ${r.filter_model ?? ''}`.trim(), clientName(r)],
+  },
+  {
+    table: 'follow_ups',
+    select: 'id, version, deleted_at, updated_by, followed_on, content, clients(name)',
+    describe: (r) => [String(r.content ?? '').slice(0, 40), clientName(r)],
+  },
+  {
+    table: 'receivables',
+    select: 'id, version, deleted_at, updated_by, title, amount, clients(name)',
+    describe: (r) => [String(r.title || '应收款'), clientName(r)],
+  },
+  {
+    table: 'work_orders',
+    select: 'id, version, deleted_at, updated_by, order_no, title, clients(name)',
+    describe: (r) => [`工单 #${r.order_no} ${r.title ?? ''}`.trim(), clientName(r)],
+  },
+]
+
+function clientName(row: Record<string, unknown>): string {
+  return String((row.clients as { name?: string } | null)?.name ?? '')
+}
+
+export async function listDeletedItems(): Promise<DeletedItem[]> {
+  const rdb = await db()
+  const groups = await Promise.all(
+    DELETED_SOURCES.map(async (source) => {
+      const rows = unwrap<Record<string, unknown>[]>(
+        await rdb.from(source.table).select(source.select).not('deleted_at', 'is', null).order('deleted_at', { ascending: false }).limit(200),
+      )
+      return (rows ?? []).map((row): DeletedItem => {
+        const [title, subtitle] = source.describe(row)
+        return {
+          table: source.table,
+          id: String(row.id),
+          version: Number(row.version),
+          title,
+          subtitle,
+          deleted_at: String(row.deleted_at),
+          updated_by: (row.updated_by as string | null) ?? null,
+        }
+      })
+    }),
+  )
+  return groups.flat().sort((a, b) => b.deleted_at.localeCompare(a.deleted_at))
+}
+
+// ---------- 系统设置 ----------
+
+export interface AppSettings {
+  replacement_interval_days: number
+  unpaid_interval_days: number
+}
+
+export async function getSettings(): Promise<AppSettings> {
+  const rdb = await db()
+  const rows = unwrap<{ key: string; value: unknown }[]>(await rdb.from('app_settings').select('key, value'))
+  const map = new Map(rows.map((r) => [r.key, Number(r.value)]))
+  return {
+    replacement_interval_days: map.get('replacement_interval_days') || 90,
+    unpaid_interval_days: map.get('unpaid_interval_days') || 30,
+  }
+}
+
+export async function updateSetting(key: keyof AppSettings, value: number): Promise<void> {
+  const rdb = await db()
+  const rows = unwrap<unknown[]>(await rdb.from('app_settings').update({ value, updated_at: new Date().toISOString() }).eq('key', key).select('key'))
+  if (!rows?.length) throw new Error('只有管理员可以修改系统设置')
+}

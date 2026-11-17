@@ -59,6 +59,7 @@ declare module 'vue' {
     ElTimelineItem: typeof import('element-plus/es')['ElTimelineItem']
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
     FollowUpFormDialog: typeof import('./components/FollowUpFormDialog.vue')['default']
+    ImportDialog: typeof import('./components/ImportDialog.vue')['default']
     PhoneLinks: typeof import('./components/PhoneLinks.vue')['default']
     ReplacementFormDialog: typeof import('./components/ReplacementFormDialog.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']

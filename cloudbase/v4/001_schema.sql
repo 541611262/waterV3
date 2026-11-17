@@ -493,8 +493,9 @@ CREATE POLICY app_settings_update ON public.app_settings FOR UPDATE TO authentic
     USING ((SELECT public.is_admin())) WITH CHECK ((SELECT public.is_admin()));
 
 -- 客户：负责人只能是自己（管理员可指定任何人）；彻底删除只有管理员
+-- 直接用本行的 owner_id 判断（而不是按 id 回查表）：新建时 INSERT ... RETURNING 要能读到刚插入、尚未提交的这一行
 CREATE POLICY clients_select ON public.clients FOR SELECT TO authenticated
-    USING (public.v4_can_read(id));
+    USING (owner_id = (SELECT auth.uid()) OR (SELECT public.is_admin()) OR public.v4_is_assignee(id));
 CREATE POLICY clients_insert ON public.clients FOR INSERT TO authenticated
     WITH CHECK (owner_id = (SELECT auth.uid()) OR (SELECT public.is_admin()));
 CREATE POLICY clients_update ON public.clients FOR UPDATE TO authenticated

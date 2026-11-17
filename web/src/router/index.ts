@@ -28,6 +28,8 @@ const VIEWS: Record<string, Lazy> = {
   '/': () => import('@/views/DashboardView.vue'),
   '/customers': () => import('@/views/ClientsView.vue'),
   '/devices': () => import('@/views/DevicesView.vue'),
+  '/members': () => import('@/views/MembersView.vue'),
+  '/settings': () => import('@/views/SettingsView.vue'),
 }
 
 const routes: RouteRecordRaw[] = [

@@ -11,10 +11,11 @@ V4 把 V3 的"一个客户一整块 JSON"（`customers.data`）拆成关系型�
 | `002_views.sql` | 查询视图：到期计算、欠款计算的唯一口径 |
 | `003_migrate_from_v3.sql` | 从 V3 迁移、迁移核对报告 |
 | `004_backup.sql` | 每日快照（pg_cron）、按客户恢复 |
+| `005_import.sql` | 表格导入：在一个事务里执行网页端算好的导入计划，全部成功或全部不生效 |
 | `tests/rls_test.sql` | 权限与规则自动测试（事务内执行后回滚） |
 | `tests/backup_drill.sql` | 备份恢复演练（事务内执行后回滚） |
 
-全部脚本都可以重复执行。按顺序执行：`schema.sql` → `001` → `002` → `003` → `004`。
+全部脚本都可以重复执行。按顺序执行：`schema.sql` → `001` → `002` → `003` → `004` → `005`。
 
 ```bash
 tcb db execute -e <环境ID> --sql "$(cat cloudbase/v4/001_schema.sql)"
