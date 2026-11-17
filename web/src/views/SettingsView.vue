@@ -14,6 +14,23 @@ const session = useSessionStore()
 const route = useRoute()
 const tab = ref(typeof route.query.tab === 'string' ? route.query.tab : 'account')
 
+// ---------- 添加到手机桌面 ----------
+const baseUrl = import.meta.env.BASE_URL
+type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> }
+const installPrompt = ref<InstallPrompt | null>(null)
+const installed = ref(window.matchMedia('(display-mode: standalone)').matches)
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault()
+  installPrompt.value = e as InstallPrompt
+})
+async function install() {
+  if (!installPrompt.value) return
+  await installPrompt.value.prompt()
+  const choice = await installPrompt.value.userChoice
+  if (choice.outcome === 'accepted') installed.value = true
+  installPrompt.value = null
+}
+
 // ---------- 修改密码 ----------
 const pwd = reactive({ old: '', next: '', confirm: '' })
 const pwdSaving = ref(false)
@@ -124,6 +141,19 @@ onMounted(() => {
           <el-descriptions-item label="所在环境">{{ appConfig.envLabel || '正式环境' }}（{{ appConfig.cloudbaseEnv }}）</el-descriptions-item>
         </el-descriptions>
 
+        <h3>添加到手机桌面</h3>
+        <div class="install">
+          <img :src="`${baseUrl}icons/icon-192.png`" alt="" width="48" height="48" />
+          <div class="install-text">
+            <template v-if="installed">已经从桌面图标打开，体验和手机应用一样。</template>
+            <template v-else>
+              <p>添加后从桌面图标打开，全屏显示，不用每次输入网址。</p>
+              <p class="sub">iPhone：用 Safari 打开本网站 → 点底部「分享」→「添加到主屏幕」。安卓：浏览器菜单 →「添加到主屏幕」或「安装应用」。</p>
+            </template>
+          </div>
+          <el-button v-if="installPrompt && !installed" type="primary" @click="install">一键安装</el-button>
+        </div>
+
         <h3>修改密码</h3>
         <el-form label-width="96px" class="pwd-form" @submit.prevent="submitPassword">
           <el-form-item label="原密码">
@@ -205,6 +235,28 @@ h3 {
   color: var(--el-text-color-secondary);
   font-size: 13px;
   margin: 0 0 12px;
+}
+.install {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 640px;
+  padding: 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  background: var(--app-surface-muted);
+}
+.install img {
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+.install-text {
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.install-text p {
+  margin: 0;
 }
 .hint {
   margin-left: 12px;

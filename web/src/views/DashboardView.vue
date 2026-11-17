@@ -103,7 +103,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div v-loading="loading" class="page">
+  <div v-loading="loading && !stats" class="page">
     <section class="hero">
       <div>
         <h2>{{ greeting }}，{{ session.member?.username }}</h2>
