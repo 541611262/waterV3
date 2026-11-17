@@ -16,6 +16,17 @@ npm run build        # 构建正式环境（.env.production）
 npm run build:staging  # 构建测试环境（.env.staging）
 ```
 
+## 测试环境
+
+- 网址：<https://water-test-d9gr3wjltdef589d6-1374271205.tcloudbaseapp.com/v4/>（只连接测试环境 `water-test-d9gr3wjltdef589d6`，页面顶部有黄色「测试环境」标签）
+- 本地开发用 8080 端口（`npm run dev`），因为测试环境的安全域名里已有 `localhost:8080`
+- 部署到测试环境：
+
+```bash
+npm run build:staging
+MSYS_NO_PATHCONV=1 tcb hosting deploy dist v4 -e water-test-d9gr3wjltdef589d6   # Git Bash 下必须加 MSYS_NO_PATHCONV=1
+```
+
 推送代码或提交 PR 时，GitHub Actions 会自动运行代码检查、类型检查、单元测试和构建（`.github/workflows/ci.yml`）。
 
 ## 目录

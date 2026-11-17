@@ -6,6 +6,6 @@ const route = useRoute()
 
 <template>
   <el-card shadow="never">
-    <el-empty :description="`「${route.meta.title}」页面将在 V4 阶段 2 实现`" />
+    <el-empty :description="`「${route.meta.title}」功能正在开发中（V4 阶段 3：工单派单、收款明细、统计报表）`" />
   </el-card>
 </template>
