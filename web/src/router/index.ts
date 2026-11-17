@@ -1,4 +1,6 @@
+import type { Component } from 'vue'
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router'
+import { useSessionStore } from '@/stores/session'
 
 export interface NavItem {
   path: string
@@ -8,7 +10,7 @@ export interface NavItem {
   adminOnly?: boolean
 }
 
-// 侧边导航（阶段 2 逐个实现页面）
+// 侧边导航
 export const NAV_ITEMS: NavItem[] = [
   { path: '/', title: '工作台', icon: 'Odometer' },
   { path: '/customers', title: '客户', icon: 'OfficeBuilding' },
@@ -20,16 +22,54 @@ export const NAV_ITEMS: NavItem[] = [
   { path: '/settings', title: '设置', icon: 'Setting' },
 ]
 
-const routes: RouteRecordRaw[] = NAV_ITEMS.map((item) => ({
-  path: item.path,
-  meta: { title: item.title },
-  component: () => import('@/views/PlaceholderView.vue'),
-}))
+type Lazy = () => Promise<{ default: Component }>
+const placeholder: Lazy = () => import('@/views/PlaceholderView.vue')
+const VIEWS: Record<string, Lazy> = {
+  '/': () => import('@/views/DashboardView.vue'),
+  '/customers': () => import('@/views/ClientsView.vue'),
+  '/devices': () => import('@/views/DevicesView.vue'),
+}
+
+const routes: RouteRecordRaw[] = [
+  { path: '/login', name: 'login', meta: { title: '登录', public: true }, component: () => import('@/views/LoginView.vue') },
+  ...NAV_ITEMS.map(
+    (item): RouteRecordRaw => ({
+      path: item.path,
+      meta: { title: item.title, adminOnly: item.adminOnly ?? false },
+      component: VIEWS[item.path] ?? placeholder,
+    }),
+  ),
+  {
+    path: '/customers/:id',
+    meta: { title: '客户详情', nav: '/customers' },
+    component: () => import('@/views/ClientDetailView.vue'),
+    props: true,
+  },
+  { path: '/:pathMatch(.*)*', redirect: '/' },
+]
 
 export const router = createRouter({
   // hash 模式：静态托管不需要配置路由重写
   history: createWebHashHistory(),
-  routes: [...routes, { path: '/:pathMatch(.*)*', redirect: '/' }],
+  routes,
+})
+
+let restoring: Promise<void> | null = null
+
+router.beforeEach(async (to) => {
+  const session = useSessionStore()
+  if (!session.ready) {
+    restoring ??= session.restore()
+    await restoring
+  }
+  if (to.meta.public) {
+    return session.isLoggedIn && to.name === 'login' ? '/' : true
+  }
+  if (!session.isLoggedIn) {
+    return { name: 'login', query: to.fullPath !== '/' ? { redirect: to.fullPath } : {} }
+  }
+  if (to.meta.adminOnly && !session.isAdmin) return '/'
+  return true
 })
 
 router.afterEach((to) => {

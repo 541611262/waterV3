@@ -17,6 +17,7 @@
   "dependencies": {
     "@cloudbase/js-sdk": "3.10.4",
     "@element-plus/icons-vue": "^2.3.2",
+    "@vueuse/core": "^15.0.0",
     "echarts": "^6.1.0",
     "element-plus": "^2.14.8",
     "pinia": "^4.1.0",

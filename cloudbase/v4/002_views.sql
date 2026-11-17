@@ -88,7 +88,8 @@ SELECT
     COALESCE(d.interval_days, public.v4_setting_int('replacement_interval_days', 90)) AS effective_interval_days,
     due.last_service_on,
     due.next_due_on,
-    due.next_due_on - public.v4_today() AS days_until_due
+    due.next_due_on - public.v4_today() AS days_until_due,
+    rcv.open_receivable_count
 FROM public.devices d
 JOIN public.clients c ON c.id = d.client_id AND c.deleted_at IS NULL
 CROSS JOIN LATERAL (
@@ -110,6 +111,14 @@ CROSS JOIN LATERAL (
                  + COALESCE(d.interval_days, public.v4_setting_int('replacement_interval_days', 90))
         END AS next_due_on
 ) due
+CROSS JOIN LATERAL (
+    -- 未结清的应收（未手动结清，且金额未登记或收款不足）
+    SELECT count(*) AS open_receivable_count
+    FROM public.receivables rc
+    WHERE rc.device_id = d.id AND rc.deleted_at IS NULL AND rc.closed_at IS NULL
+      AND (rc.amount IS NULL OR rc.amount > (
+          SELECT COALESCE(sum(p.amount), 0) FROM public.payments p WHERE p.receivable_id = rc.id AND p.deleted_at IS NULL))
+) rcv
 WHERE d.deleted_at IS NULL;
 
 -- ---------- 应收款总览 ----------

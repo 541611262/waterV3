@@ -18,6 +18,8 @@ export default defineConfig({
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
+  // 本地开发用 8080：测试环境的安全域名中已包含 localhost:8080
+  server: { port: 8080, strictPort: true },
   build: {
     chunkSizeWarningLimit: 1500,
   },
