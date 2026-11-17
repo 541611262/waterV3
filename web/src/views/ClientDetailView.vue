@@ -30,6 +30,7 @@ import DueTag from '@/components/DueTag.vue'
 import FollowUpFormDialog from '@/components/FollowUpFormDialog.vue'
 import PhoneLinks from '@/components/PhoneLinks.vue'
 import ReplacementFormDialog from '@/components/ReplacementFormDialog.vue'
+import WorkOrderFormDialog from '@/components/WorkOrderFormDialog.vue'
 import { formatBeijingDateTime } from '@/lib/dates'
 import { AUDIT_ACTIONS, FIELD_LABELS, TABLE_LABELS, describeRemind, formatMoney } from '@/lib/format'
 import { useSessionStore } from '@/stores/session'
@@ -95,6 +96,14 @@ const editingDevice = ref<Device | null>(null)
 const replacementDialog = ref(false)
 const replacementDevice = ref<DeviceOverview | null>(null)
 const followDialog = ref(false)
+const orderDialog = ref(false)
+const orderPreset = ref<{ client_id: string; device_id?: string | null } | null>(null)
+
+function dispatch(d?: DeviceOverview) {
+  if (!client.value) return
+  orderPreset.value = { client_id: client.value.id, device_id: d?.id ?? null }
+  orderDialog.value = true
+}
 
 function addDevice() {
   editingDevice.value = null
@@ -245,6 +254,7 @@ function describeChanges(entry: AuditEntry): string[] {
                 </div>
                 <div class="device-actions">
                   <el-button size="small" type="primary" @click="registerReplacement(d)">登记换芯</el-button>
+                  <el-button v-if="canEdit" size="small" @click="dispatch(d)">派单</el-button>
                   <template v-if="canEdit">
                     <el-button size="small" @click="editDevice(d)">编辑</el-button>
                     <el-button size="small" type="danger" link @click="deleteDevice(d)">删除</el-button>
@@ -329,6 +339,7 @@ function describeChanges(entry: AuditEntry): string[] {
     <ClientFormDialog v-model="clientDialog" :client="client" @saved="load" />
     <DeviceFormDialog v-model="deviceDialog" :device="editingDevice" :client-id="client?.id" @saved="load" />
     <ReplacementFormDialog v-model="replacementDialog" :device="replacementDevice" @saved="load" />
+    <WorkOrderFormDialog v-model="orderDialog" :preset="orderPreset" />
     <FollowUpFormDialog v-model="followDialog" :client-id="client?.id ?? null" :client-name="client?.name" @saved="load" />
   </div>
 </template>

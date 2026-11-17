@@ -355,7 +355,7 @@ export interface WorkOrderQuery extends PageQuery {
 }
 
 export interface WorkOrderRow extends WorkOrder {
-  clients: { name: string; region: string } | null
+  clients: { name: string; region: string; owner_id: string } | null
   devices: { address: string; contact_person: string; phone: string; model: string; location: string } | null
 }
 
@@ -363,7 +363,7 @@ export async function listWorkOrders(q: WorkOrderQuery): Promise<Page<WorkOrderR
   const rdb = await db()
   let query = rdb
     .from('work_orders')
-    .select('*, clients(name, region), devices(address, contact_person, phone, model, location)', { count: 'exact' })
+    .select('*, clients(name, region, owner_id), devices(address, contact_person, phone, model, location)', { count: 'exact' })
     .is('deleted_at', null)
   const kw = sanitizeKeyword(q.keyword)
   if (kw) query = query.or(`title.ilike.*${kw}*,description.ilike.*${kw}*,result.ilike.*${kw}*`)
@@ -371,6 +371,7 @@ export async function listWorkOrders(q: WorkOrderQuery): Promise<Page<WorkOrderR
   if (q.assigneeId) query = query.eq('assignee_id', q.assigneeId)
   if (q.clientId) query = query.eq('client_id', q.clientId)
   query = applySort(query, q.sort, { field: 'scheduled_on', order: 'asc' })
+  if (!q.sort) query = query.order('order_no', { ascending: false })
   return pageOf<WorkOrderRow>(query.range(...range(q)))
 }
 
@@ -378,6 +379,16 @@ export type WorkOrderInput = Pick<WorkOrder, 'client_id' | 'device_id' | 'type' 
 
 export function createWorkOrder(input: WorkOrderInput) {
   return insertRow<WorkOrder>('work_orders', { ...input })
+}
+
+/** 批量派单：每台设备一张工单（一次请求写入） */
+export async function createWorkOrders(inputs: WorkOrderInput[]): Promise<WorkOrder[]> {
+  const rdb = await db()
+  return unwrap<WorkOrder[]>(await rdb.from('work_orders').insert(inputs).select())
+}
+
+export async function countOpenWorkOrders(uid: string): Promise<number> {
+  return countOf('work_orders', (q) => q.is('deleted_at', null).in('status', ['pending', 'in_progress']).eq('assignee_id', uid))
 }
 
 export function updateWorkOrder(

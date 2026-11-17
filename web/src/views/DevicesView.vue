@@ -9,10 +9,12 @@ import { DEVICE_STATUSES, listDevices, listRegions, softDelete, type DeviceStatu
 import { collectExportEntries, downloadWorkbook } from '@/api/importExport'
 import type { DeviceOverview } from '@/api/types'
 import DeviceFormDialog from '@/components/DeviceFormDialog.vue'
+import BatchDispatchDialog from '@/components/BatchDispatchDialog.vue'
 import DueTag from '@/components/DueTag.vue'
 import ImportDialog from '@/components/ImportDialog.vue'
 import PhoneLinks from '@/components/PhoneLinks.vue'
 import ReplacementFormDialog from '@/components/ReplacementFormDialog.vue'
+import WorkOrderFormDialog from '@/components/WorkOrderFormDialog.vue'
 import { usePagedList } from '@/composables/usePagedList'
 import { todayStr } from '@/lib/dates'
 import { useSessionStore } from '@/stores/session'
@@ -70,6 +72,14 @@ function openDetail(row: DeviceOverview) {
 
 // ---------- 导入导出与批量操作 ----------
 const importDialog = ref(false)
+const dispatchDialog = ref(false)
+const orderDialog = ref(false)
+const orderPreset = ref<{ client_id: string; device_id: string } | null>(null)
+
+function dispatch(row: DeviceOverview) {
+  orderPreset.value = { client_id: row.client_id, device_id: row.id }
+  orderDialog.value = true
+}
 const exporting = ref(false)
 const selected = ref<DeviceOverview[]>([])
 const tableRef = ref<{ clearSelection: () => void }>()
@@ -202,6 +212,7 @@ onMounted(async () => {
     <el-card v-loading="list.loading.value" shadow="never" class="content">
       <div v-if="selected.length" class="batch-bar">
         <span>已选 {{ selected.length }} 条</span>
+        <el-button size="small" type="primary" plain @click="dispatchDialog = true">批量派单</el-button>
         <el-button size="small" :loading="exporting" @click="exportDevices('selected')">导出所选</el-button>
         <el-button size="small" type="danger" plain @click="deleteSelected">删除所选</el-button>
         <el-button size="small" link @click="tableRef?.clearSelection()">取消选择</el-button>
@@ -256,9 +267,10 @@ onMounted(async () => {
             </template>
           </el-table-column>
           <el-table-column v-if="session.isAdmin" prop="owner_name" label="负责人" width="100" />
-          <el-table-column label="操作" width="150" fixed="right">
+          <el-table-column label="操作" width="190" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openReplacement(row as DeviceOverview)">登记换芯</el-button>
+              <el-button link @click="dispatch(row as DeviceOverview)">派单</el-button>
               <el-button link @click="openDetail(row as DeviceOverview)">详情</el-button>
             </template>
           </el-table-column>
@@ -307,6 +319,8 @@ onMounted(async () => {
 
     <DeviceFormDialog v-model="deviceDialog" @saved="list.load()" />
     <ImportDialog v-model="importDialog" @imported="list.load()" />
+    <BatchDispatchDialog v-model="dispatchDialog" :devices="selected" @done="tableRef?.clearSelection()" />
+    <WorkOrderFormDialog v-model="orderDialog" :preset="orderPreset" />
     <ReplacementFormDialog v-model="replacementDialog" :device="current" @saved="list.load()" />
   </div>
 </template>

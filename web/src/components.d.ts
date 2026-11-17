@@ -12,9 +12,11 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AppChart: typeof import('./components/charts/AppChart.vue')['default']
+    BatchDispatchDialog: typeof import('./components/BatchDispatchDialog.vue')['default']
     BrandMark: typeof import('./components/BrandMark.vue')['default']
     ClientFormDialog: typeof import('./components/ClientFormDialog.vue')['default']
     ClientPicker: typeof import('./components/ClientPicker.vue')['default']
+    CompleteWorkOrderDialog: typeof import('./components/CompleteWorkOrderDialog.vue')['default']
     DeviceFormDialog: typeof import('./components/DeviceFormDialog.vue')['default']
     DueTag: typeof import('./components/DueTag.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
@@ -67,6 +69,7 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     StatCard: typeof import('./components/StatCard.vue')['default']
+    WorkOrderFormDialog: typeof import('./components/WorkOrderFormDialog.vue')['default']
   }
   export interface GlobalDirectives {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

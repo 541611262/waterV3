@@ -31,6 +31,7 @@ const VIEWS: Record<string, Lazy> = {
   '/': () => import('@/views/DashboardView.vue'),
   '/customers': () => import('@/views/ClientsView.vue'),
   '/devices': () => import('@/views/DevicesView.vue'),
+  '/work-orders': () => import('@/views/WorkOrdersView.vue'),
   '/members': () => import('@/views/MembersView.vue'),
   '/settings': () => import('@/views/SettingsView.vue'),
 }
