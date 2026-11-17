@@ -373,7 +373,7 @@ const Assistant = (() => {
         try {
             for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
                 setStatus(round === 0 ? '思考中...' : '正在查询数据...');
-                const response = await transport({ messages: history, userName: currentUser.username, userRole: currentUser.role, today: todayStr() });
+                const response = await transport({ messages: history, userName: currentUser.username, userRole: currentUser.role });
                 if (!response || !response.ok) {
                     history.length = checkpoint;
                     if (response && Number.isFinite(response.remaining)) setRemaining(response.remaining, response.limit);

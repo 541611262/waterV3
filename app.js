@@ -466,7 +466,7 @@ function renderUserItem({ id, username, role, createdAt, actionsHtml }) {
             <div class="user-item-info">
                 <h3>${escapeHtml(username || '(未命名)')}</h3>
                 <p>角色: ${role === 'admin' ? '管理员' : '普通用户'}</p>
-                ${createdAt ? `<p>创建时间: ${new Date(createdAt).toLocaleDateString()}</p>` : ''}
+                ${createdAt ? `<p>创建时间: ${formatBeijingDisplayDate(createdAt)}</p>` : ''}
             </div>
             <div class="user-item-actions" data-id="${escapeHtml(id)}">${actionsHtml}</div>
         </div>
@@ -1125,8 +1125,25 @@ function formatDate(date) {
     return `${year}-${month}-${day}`;
 }
 
+// 系统的使用者在中国：“今天”、到期天数和页面上显示的时间一律按北京时间，与使用者电脑的时区无关
+const APP_TIME_ZONE = 'Asia/Shanghai';
+const beijingDateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: APP_TIME_ZONE });
+
+// 任意时间点（Date 或 ISO 字符串）对应的北京日期 YYYY-MM-DD
+function beijingDate(value = new Date()) {
+    return beijingDateFormatter.format(value instanceof Date ? value : new Date(value));
+}
+
 function todayStr() {
-    return formatDate(new Date());
+    return beijingDate();
+}
+
+function formatBeijingDateTime(value) {
+    return new Date(value).toLocaleString('zh-CN', { timeZone: APP_TIME_ZONE, hour12: false });
+}
+
+function formatBeijingDisplayDate(value) {
+    return new Date(value).toLocaleDateString('zh-CN', { timeZone: APP_TIME_ZONE });
 }
 
 // 'YYYY-MM-DD' → 本地零点的 Date
@@ -1255,7 +1272,7 @@ function getNextUnpaidDate(customer, device) {
     if (!device.hasUnpaid) return '';
     const latestFollowUp = getLatestFollowUp(customer);
     const base = latestDate([latestFollowUp ? latestFollowUp.date : '', getLatestReplacementDate(device)]) ||
-        (device.createdAt ? formatDate(new Date(device.createdAt)) : '');
+        (device.createdAt ? beijingDate(device.createdAt) : '');
     return base ? addDays(base, device.unpaidInterval || DEFAULT_UNPAID_INTERVAL) : '';
 }
 
@@ -1940,7 +1957,7 @@ function exportDetailedHistory() {
         sortByDateDesc(device.replacementHistory).forEach(record => {
             rows.push([customer.name, customer.region, device.address, device.location, device.model,
                 toSheetDate(record.date), record.filterModel || '', record.quantity || 1, record.cost || 0,
-                record.operator || '', record.notes || '', record.timestamp ? new Date(record.timestamp).toLocaleString() : '']);
+                record.operator || '', record.notes || '', record.timestamp ? formatBeijingDateTime(record.timestamp) : '']);
         });
     });
 
@@ -3137,7 +3154,7 @@ function formatNotificationTime(timeString) {
     const diffDays = Math.floor(diffHours / 24);
     if (diffDays < 7) return `${diffDays}天前`;
 
-    return time.toLocaleDateString();
+    return formatBeijingDisplayDate(time);
 }
 
 // 切换通知下拉框

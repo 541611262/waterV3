@@ -87,16 +87,12 @@ const TOOLS = [
     }, ['record_id', 'changes'])
 ];
 
-// “今天”以网页传来的日期为准（与页面上到期天数的计算一致）；只接受与服务器时间相差 2 天以内的日期，否则用北京时间
-function resolveToday(clientDate) {
-    const beijing = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
-    let day = beijing;
-    if (typeof clientDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(clientDate)) {
-        const diff = Math.abs(Date.parse(clientDate) - Date.parse(beijing)) / 86400000;
-        if (diff <= 2) day = clientDate;
-    }
-    const weekday = new Intl.DateTimeFormat('zh-CN', { timeZone: 'UTC', weekday: 'long' }).format(new Date(`${day}T00:00:00Z`));
-    return `${day}（${weekday}）`;
+// 系统使用者在中国，“今天”一律按北京时间（与网页上到期天数的计算一致）
+function beijingToday() {
+    const now = new Date();
+    const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(now);
+    const weekday = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', weekday: 'long' }).format(now);
+    return `${day}（${weekday}，北京时间）`;
 }
 
 // 角色只影响回答的措辞；能看到哪些数据完全由数据库 RLS 决定
@@ -106,8 +102,8 @@ function describeRole(role) {
         : '普通成员（只能看到自己负责的客户，看不到其他同事的客户）';
 }
 
-function systemPrompt(userName, clientDate, role) {
-    return `你是「滤芯小助手」，服务于一家净水器公司的滤芯更换提醒系统。当前用户是同事「${userName || '未知'}」，角色：${describeRole(role)}。今天是 ${resolveToday(clientDate)}。
+function systemPrompt(userName, role) {
+    return `你是「滤芯小助手」，服务于一家净水器公司的滤芯更换提醒系统。当前用户是同事「${userName || '未知'}」，角色：${describeRole(role)}。今天是 ${beijingToday()}。
 
 【数据】
 - 客户数据只能通过工具获取，不要编造。查不到就如实说明。
@@ -223,7 +219,7 @@ function describeModelError(status, text) {
     return `AI 服务调用失败（HTTP ${status}）`;
 }
 
-async function callModel(messages, userName, clientDate, role) {
+async function callModel(messages, userName, role) {
     let response;
     try {
         response = await fetchWithTimeout(`${CONFIG.baseUrl}/chat/completions`, {
@@ -231,7 +227,7 @@ async function callModel(messages, userName, clientDate, role) {
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${CONFIG.apiKey}` },
             body: JSON.stringify({
                 model: CONFIG.model,
-                messages: [{ role: 'system', content: systemPrompt(userName, clientDate, role) }, ...messages],
+                messages: [{ role: 'system', content: systemPrompt(userName, role) }, ...messages],
                 tools: TOOLS,
                 tool_choice: 'auto',
                 temperature: 0.3,
@@ -276,7 +272,7 @@ exports.main = async (event) => {
         }
 
         const userName = typeof input.userName === 'string' ? input.userName.slice(0, 50) : '';
-        const result = await callModel(messages, userName, input.today, input.userRole);
+        const result = await callModel(messages, userName, input.userRole);
         return { ok: true, message: result.message, finishReason: result.finishReason, remaining: quota.remaining, limit: quota.limit, model: CONFIG.model };
     } catch (error) {
         if (error instanceof AppError) return fail(error.code, error.message, error.extra);
@@ -286,4 +282,4 @@ exports.main = async (event) => {
 };
 
 // 供本地测试使用
-exports._internal = { sanitizeMessages, systemPrompt, resolveToday, TOOLS };
+exports._internal = { sanitizeMessages, systemPrompt, beijingToday, TOOLS };
