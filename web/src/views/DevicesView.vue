@@ -2,7 +2,7 @@
 import { ArrowDown, Download, Grid, List, Plus, Refresh, Search, Upload } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { refDebounced, useMediaQuery, useStorage } from '@vueuse/core'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { describeError } from '@/api/cloud'
 import { DEVICE_STATUSES, listDevices, listRegions, softDelete, type DeviceStatusKey } from '@/api/data'
@@ -27,7 +27,14 @@ const initialStatuses = String(route.query.status ?? '')
   .split(',')
   .filter((s): s is DeviceStatusKey => DEVICE_STATUSES.some((d) => d.key === s))
 
-const keyword = ref('')
+const keyword = ref(typeof route.query.q === 'string' ? route.query.q : '')
+// 顶栏全局搜索跳转过来时更新关键字
+watch(
+  () => route.query.q,
+  (q) => {
+    if (typeof q === 'string') keyword.value = q
+  },
+)
 const keywordDebounced = refDebounced(keyword, 300)
 const statuses = ref<DeviceStatusKey[]>(initialStatuses)
 const ownerId = ref('')

@@ -11,6 +11,8 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AppChart: typeof import('./components/charts/AppChart.vue')['default']
+    BrandMark: typeof import('./components/BrandMark.vue')['default']
     ClientFormDialog: typeof import('./components/ClientFormDialog.vue')['default']
     ClientPicker: typeof import('./components/ClientPicker.vue')['default']
     DeviceFormDialog: typeof import('./components/DeviceFormDialog.vue')['default']
@@ -64,6 +66,7 @@ declare module 'vue' {
     ReplacementFormDialog: typeof import('./components/ReplacementFormDialog.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    StatCard: typeof import('./components/StatCard.vue')['default']
   }
   export interface GlobalDirectives {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

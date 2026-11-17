@@ -546,3 +546,52 @@ export async function updateSetting(key: keyof AppSettings, value: number): Prom
   const rows = unwrap<unknown[]>(await rdb.from('app_settings').update({ value, updated_at: new Date().toISOString() }).eq('key', key).select('key'))
   if (!rows?.length) throw new Error('只有管理员可以修改系统设置')
 }
+
+// ---------- 统计用的原始数据（数据量为几千条以内，在浏览器中汇总） ----------
+
+export interface ReplacementFact {
+  replaced_on: string | null
+  quantity: number
+  cost: number | string
+  operator_name: string
+  client_id: string
+  created_by: string | null
+}
+
+export async function fetchReplacementsSince(start: string): Promise<ReplacementFact[]> {
+  const rdb = await db()
+  const all: ReplacementFact[] = []
+  for (let from = 0; ; from += 1000) {
+    const rows = unwrap<ReplacementFact[]>(
+      await rdb
+        .from('replacements')
+        .select('replaced_on, quantity, cost, operator_name, client_id, created_by')
+        .is('deleted_at', null)
+        .gte('replaced_on', start)
+        .order('replaced_on')
+        .range(from, from + 999),
+    )
+    all.push(...rows)
+    if (rows.length < 1000) break
+  }
+  return all
+}
+
+export type DeviceFact = Pick<DeviceOverview, 'id' | 'days_until_due' | 'region' | 'province' | 'owner_id' | 'owner_name' | 'model' | 'client_id'>
+
+export async function fetchDeviceFacts(): Promise<DeviceFact[]> {
+  const rdb = await db()
+  const all: DeviceFact[] = []
+  for (let from = 0; ; from += 1000) {
+    const rows = unwrap<DeviceFact[]>(
+      await rdb
+        .from('device_overview')
+        .select('id, days_until_due, region, province, owner_id, owner_name, model, client_id')
+        .order('id')
+        .range(from, from + 999),
+    )
+    all.push(...rows)
+    if (rows.length < 1000) break
+  }
+  return all
+}

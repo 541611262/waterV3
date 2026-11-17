@@ -14,13 +14,3 @@ const isPublic = computed(() => Boolean(route.meta.public))
     <AppLayout v-else />
   </el-config-provider>
 </template>
-
-<style>
-html,
-body,
-#app {
-  margin: 0;
-  height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
-}
-</style>
