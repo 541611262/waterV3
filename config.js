@@ -6,5 +6,5 @@ window.APP_CONFIG = {
     cloudbaseEnv: 'water-storage-d0ggf2m9faaadb034',
     cloudbaseRegion: 'ap-shanghai',
     // AI 小助手：部署好云函数 ai-chat 并配置 DEEPSEEK_API_KEY 后改为 true（见 DEPLOY.md）
-    aiAssistant: false
+    aiAssistant: true
 };

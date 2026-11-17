@@ -108,6 +108,25 @@ https://water-storage-d0ggf2m9faaadb034-1374271205.tcloudbaseapp.com/water/
 - 提示"模型不可用，可能已改名"：到 DeepSeek 官方文档查看当前模型名称，修改 `AI_MODEL`。
 - 返回 `EXCEED_AUTHORITY` / `ACTION_FORBIDDEN`：在云函数的权限设置中允许已登录用户调用 `ai-chat`。
 
+## 用命令行部署（可选）
+
+也可以用腾讯云开发 CLI 完成部署（`npm install -g @cloudbase/cli`，然后 `tcb login` 在浏览器中授权）：
+
+```bash
+# 只更新云函数代码（不会改动控制台里配置的环境变量）
+tcb fn code update ai-chat --dir cloudfunctions/ai-chat -e water-storage-d0ggf2m9faaadb034
+
+# 上传网站（目录中只放上面列出的 7 项）
+tcb hosting deploy <网站文件目录> /water -e water-storage-d0ggf2m9faaadb034
+
+# 执行 SQL
+tcb db execute -e water-storage-d0ggf2m9faaadb034 --sql "SELECT 1"
+```
+
+在 Windows 的 Git Bash 中运行时，先执行 `export MSYS_NO_PATHCONV=1`，否则 `/water` 会被自动改写成本地路径，文件会传到错误的目录。
+
+首次创建云函数用 `tcb fn deploy ai-chat`（读取项目根目录的 `cloudbaserc.json`：Node.js 20、超时 60 秒）。
+
 ## 迁移原有数据
 
 用单机版的那台电脑打开云端网址并登录，页面会提示"浏览器里还保存着单机版的数据"，点击 **上传到我的云端账号** 即可。上传成功后建议清除本机数据。

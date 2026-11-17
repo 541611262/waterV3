@@ -1,0 +1,16 @@
+{
+  "version": "2.0",
+  "envId": "water-storage-d0ggf2m9faaadb034",
+  "functionRoot": "./cloudfunctions",
+  "functions": [
+    {
+      "name": "ai-chat",
+      "description": "滤芯更换提醒系统 AI 小助手（DEEPSEEK_API_KEY 等环境变量在控制台配置，不写在这里）",
+      "handler": "index.main",
+      "runtime": "Nodejs20.19",
+      "timeout": 60,
+      "memorySize": 256,
+      "installDependency": false
+    }
+  ]
+}
