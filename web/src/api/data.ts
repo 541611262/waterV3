@@ -606,3 +606,33 @@ export async function fetchDeviceFacts(): Promise<DeviceFact[]> {
   }
   return all
 }
+
+// ---------- 收款汇总 ----------
+
+export interface ReceivableSummary {
+  openCount: number
+  /** 已登记金额的未收合计 */
+  outstanding: number
+  /** 金额未登记的未结清笔数 */
+  unknownAmount: number
+  dueCount: number
+  collectedThisMonth: number
+}
+
+export async function receivableSummary(): Promise<ReceivableSummary> {
+  const rdb = await db()
+  const monthStart = `${todayStr().slice(0, 7)}-01`
+  const [open, payments] = await Promise.all([
+    rdb.from('receivable_overview').select('amount, outstanding, days_until_remind').eq('settled', false).limit(10000),
+    rdb.from('payments').select('amount').is('deleted_at', null).gte('paid_on', monthStart).limit(10000),
+  ])
+  const openRows = unwrap<{ amount: unknown; outstanding: unknown; days_until_remind: number | null }[]>(open) ?? []
+  const paymentRows = unwrap<{ amount: unknown }[]>(payments) ?? []
+  return {
+    openCount: openRows.length,
+    outstanding: openRows.reduce((sum, r) => sum + (Number(r.outstanding) || 0), 0),
+    unknownAmount: openRows.filter((r) => r.amount === null).length,
+    dueCount: openRows.filter((r) => (r.days_until_remind ?? 1) <= 0).length,
+    collectedThisMonth: paymentRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0),
+  }
+}
