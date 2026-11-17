@@ -1,0 +1,10 @@
+{
+  "name": "ai-chat",
+  "version": "1.0.0",
+  "description": "滤芯更换提醒系统 AI 小助手云函数（无第三方依赖）",
+  "main": "index.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "private": true
+}

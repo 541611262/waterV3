@@ -446,6 +446,8 @@ function showMainApp() {
         document.querySelector('.user-actions').appendChild(userManagementBtn);
     }
 
+    if (typeof Assistant !== 'undefined') Assistant.refreshVisibility();
+    
     // 检查并显示登录提醒（延迟执行，确保界面完全加载）
     setTimeout(checkAndShowLoginReminder, 2000);
 }
@@ -681,6 +683,7 @@ async function logout() {
     }
     currentUser = null;
     selectedDeviceIds.clear();
+    if (typeof Assistant !== 'undefined') Assistant.reset();
     const userManagementBtn = document.getElementById('userManagementBtn');
     if (userManagementBtn) userManagementBtn.remove();
     showLogin();

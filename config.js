@@ -4,5 +4,7 @@
 // 环境 ID 会出现在网页代码中，这是正常的；数据安全由云端的登录和安全规则保证，不依赖于隐藏环境 ID
 window.APP_CONFIG = {
     cloudbaseEnv: 'water-storage-d0ggf2m9faaadb034',
-    cloudbaseRegion: 'ap-shanghai'
+    cloudbaseRegion: 'ap-shanghai',
+    // AI 小助手：部署好云函数 ai-chat 并配置 DEEPSEEK_API_KEY 后改为 true（见 DEPLOY.md）
+    aiAssistant: false
 };

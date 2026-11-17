@@ -61,9 +61,9 @@ window.APP_CONFIG = {
 ## 第六步：上传网站
 
 在控制台 **静态网站托管** 中上传以下文件和文件夹（保持目录结构）：
-`index.html`、`app.js`、`cloud.js`、`config.js`、`style.css`、`vendor/`
+`index.html`、`app.js`、`assistant.js`、`cloud.js`、`config.js`、`style.css`、`vendor/`
 
-不要上传 `examples/`、`cloudbase/`、`.claude/` 和任何客户数据表格。
+不要上传 `examples/`、`cloudbase/`、`cloudfunctions/`、`docs/`、`.claude/` 和任何客户数据表格。
 
 当前部署在静态托管的 `/water/` 目录下，访问地址：
 https://water-storage-d0ggf2m9faaadb034-1374271205.tcloudbaseapp.com/water/
@@ -72,10 +72,41 @@ https://water-storage-d0ggf2m9faaadb034-1374271205.tcloudbaseapp.com/water/
 
 ## 更新网站
 
-代码修改后，把上面 6 项重新上传到 **同一个目录**（`/water/`）覆盖即可，数据不受影响。
+代码修改后，把上面 7 项重新上传到 **同一个目录**（`/water/`）覆盖即可，数据不受影响。
 
 - 上传后如果页面没变化，是 CDN 缓存，等几分钟，或按 `Ctrl + F5` 强制刷新。
 - 如果这次更新改动了 `cloudbase/schema.sql`，需要先在 SQL 编辑器中重新执行一次（脚本可以重复执行，不会删除数据）。
+
+## AI 小助手（可选）
+
+设计说明见 [`docs/AI助手设计.md`](docs/AI助手设计.md)。默认关闭：`config.js` 中 `aiAssistant` 为 `false` 时不显示小助手。
+
+1. **DeepSeek 密钥**：在 [DeepSeek 开放平台](https://platform.deepseek.com) 注册、充值，创建一个 API Key。**不要发给任何人，也不要写进代码或 git。**
+2. **数据库**：在 SQL 编辑器中重新执行一次 [`cloudbase/schema.sql`](cloudbase/schema.sql)（新增 `ai_usage` 表和 `consume_ai_quota` 函数，已有数据不受影响）。
+3. **云函数**：控制台 → 云函数 / 托管 → 新建云函数：
+   - 函数名称：`ai-chat`（必须一致）
+   - 运行环境：Node.js 18 或更高
+   - 代码：选择在线编辑，把 [`cloudfunctions/ai-chat/index.js`](cloudfunctions/ai-chat/index.js) 的全部内容粘贴进去（没有第三方依赖，不需要安装）
+   - **超时时间：60 秒**（默认只有几秒，AI 回答会超时）
+   - 环境变量：`DEEPSEEK_API_KEY` = 你的 API Key；其他可选变量见下表
+4. 把 `config.js` 中的 `aiAssistant` 改为 `true`，重新上传网站文件（含 `assistant.js`），登录后右下角出现「🤖 小助手」。
+
+| 环境变量 | 作用 | 默认值 |
+|---|---|---|
+| `DEEPSEEK_API_KEY` | API 密钥（必填） | — |
+| `AI_MODEL` | 模型，如 `deepseek-flash`、`deepseek-v4-pro` | `deepseek-flash` |
+| `AI_BASE_URL` | 接口地址，换用其他兼容 OpenAI 格式的服务时修改 | `https://api.deepseek.com` |
+| `AI_DAILY_LIMIT` | 每人每天的提问次数 | `50` |
+| `AI_MAX_TOKENS` | 单次回答的最大长度 | `1500` |
+
+修改环境变量后保存即可，下一次提问生效，不用重新上传网站。
+
+常见问题：
+
+- 提示"小助手云函数 ai-chat 还没有部署"：函数名称不对或还没部署成功。
+- 提示"次数校验失败"：还没有执行最新的 `schema.sql`。
+- 提示"模型不可用，可能已改名"：到 DeepSeek 官方文档查看当前模型名称，修改 `AI_MODEL`。
+- 返回 `EXCEED_AUTHORITY` / `ACTION_FORBIDDEN`：在云函数的权限设置中允许已登录用户调用 `ai-chat`。
 
 ## 迁移原有数据
 

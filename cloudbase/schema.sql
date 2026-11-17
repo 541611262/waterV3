@@ -129,3 +129,57 @@ CREATE POLICY members_insert ON public.members FOR INSERT TO authenticated
 CREATE POLICY members_update ON public.members FOR UPDATE TO authenticated
     USING ((SELECT public.is_admin()))
     WITH CHECK ((SELECT public.is_admin()));
+
+-- ---------- AI 小助手：每人每天的使用次数 ----------
+-- 只记录次数，不保存聊天内容。网页端没有这张表的任何权限，只能通过下面的函数计数
+CREATE TABLE IF NOT EXISTS public.ai_usage (
+    uid       varchar(64) NOT NULL,
+    day       date        NOT NULL,
+    questions integer     NOT NULL DEFAULT 0,
+    calls     integer     NOT NULL DEFAULT 0,
+    PRIMARY KEY (uid, day)
+);
+ALTER TABLE public.ai_usage ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.ai_usage FROM anon, authenticated;
+
+-- 云函数用用户自己的登录凭证调用本函数：凭证无效时 auth.uid() 为空，直接拒绝。
+-- 新问题计入提问次数；同一问题内的工具调用续轮不计入，但总调用次数不超过 提问上限 × 8，防止绕过。
+-- 用户自己直接调用本函数只会消耗自己的次数，没有任何好处。
+CREATE OR REPLACE FUNCTION public.consume_ai_quota(p_is_new_question boolean, p_daily_limit integer)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_uid   text    := auth.uid();
+    v_day   date    := (now() AT TIME ZONE 'Asia/Shanghai')::date;
+    v_limit integer := GREATEST(COALESCE(p_daily_limit, 50), 1);
+    v_row   public.ai_usage%ROWTYPE;
+BEGIN
+    IF v_uid IS NULL THEN
+        RAISE EXCEPTION 'not authenticated' USING ERRCODE = '42501';
+    END IF;
+
+    INSERT INTO public.ai_usage (uid, day) VALUES (v_uid, v_day) ON CONFLICT (uid, day) DO NOTHING;
+    SELECT * INTO v_row FROM public.ai_usage WHERE uid = v_uid AND day = v_day FOR UPDATE;
+
+    IF p_is_new_question THEN
+        IF v_row.questions >= v_limit THEN
+            RETURN json_build_object('allowed', false, 'remaining', 0, 'limit', v_limit);
+        END IF;
+        UPDATE public.ai_usage SET questions = questions + 1, calls = calls + 1
+        WHERE uid = v_uid AND day = v_day RETURNING * INTO v_row;
+    ELSE
+        IF v_row.questions = 0 OR v_row.calls >= v_limit * 8 THEN
+            RETURN json_build_object('allowed', false, 'remaining', GREATEST(v_limit - v_row.questions, 0), 'limit', v_limit);
+        END IF;
+        UPDATE public.ai_usage SET calls = calls + 1
+        WHERE uid = v_uid AND day = v_day RETURNING * INTO v_row;
+    END IF;
+
+    RETURN json_build_object('allowed', true, 'remaining', v_limit - v_row.questions, 'limit', v_limit);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.consume_ai_quota(boolean, integer) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.consume_ai_quota(boolean, integer) TO authenticated;

@@ -10,6 +10,7 @@ const CloudStore = (() => {
 
     let auth = null;
     let rdb = null;
+    let gatewayUrl = '';
     const syncedJson = new Map(); // 客户ID → 上次成功写入云端时的 JSON，用于只上传有变化的客户
     let syncing = false;
     let syncQueued = false;
@@ -31,6 +32,40 @@ const CloudStore = (() => {
         const app = cloudbase.init({ env: config.cloudbaseEnv, region: config.cloudbaseRegion || 'ap-shanghai' });
         auth = typeof app.auth === 'function' ? app.auth({ persistence: 'local' }) : app.auth;
         rdb = app.rdb();
+        gatewayUrl = `https://${config.cloudbaseEnv}.api.tcloudbasegateway.com`;
+    }
+
+    // ---------- AI 小助手 ----------
+    // 通过网关调用云函数 ai-chat。登录凭证同时放在请求体里，由云函数交给数据库校验身份和扣减次数
+    async function callAssistant(payload) {
+        const token = await auth.getAccessToken();
+        const accessToken = token && (token.accessToken || token.access_token);
+        if (!accessToken) throw new Error('登录已过期，请重新登录');
+
+        let response;
+        try {
+            response = await fetch(`${gatewayUrl}/v1/functions/ai-chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+                body: JSON.stringify({ ...payload, accessToken })
+            });
+        } catch (error) {
+            throw new Error('无法连接小助手服务，请检查网络');
+        }
+        const text = await response.text();
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (error) {
+            throw new Error(`小助手服务返回异常（HTTP ${response.status}）`);
+        }
+        // 网关可能把函数返回值包在 result 中
+        if (data && !('ok' in data) && data.result && typeof data.result === 'object') data = data.result;
+        if (!response.ok && !(data && 'ok' in data)) {
+            const reason = data && (data.message || data.code);
+            throw new Error(response.status === 404 ? '小助手云函数 ai-chat 还没有部署' : `小助手服务调用失败（HTTP ${response.status}${reason ? '：' + reason : ''}）`);
+        }
+        return data;
     }
 
     // 兼容 SDK 不同版本的返回值：{ data, error } 或直接抛出异常
@@ -254,6 +289,7 @@ const CloudStore = (() => {
         loadCustomers,
         sync,
         hasPendingChanges,
+        callAssistant,
         onStatusChange(listener) { statusListener = listener; }
     };
 })();

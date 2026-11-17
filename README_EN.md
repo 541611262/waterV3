@@ -19,6 +19,12 @@ A web application to track and remind customers when to replace their water filt
 - Replacement records (per installation) and follow-up records (per customer): add, edit, view
 - Bulk actions: select records (or everything in the current filtered list) to export or delete in one go; deletion requires typing a confirmation word and exports an Excel backup first by default
 
+### AI assistant (cloud mode, optional)
+- Powered by DeepSeek: find due customers, plan visits, draft reminder and payment messages, check data quality
+- Turns spoken follow-up notes into records, logs filter replacements and edits fields — every change needs an explicit confirmation; nothing can be deleted
+- The API key lives only in a cloud function; lookups run in the browser against data the user is already allowed to see; phone numbers are masked before anything is sent to the model
+- 50 questions per user per day (configurable); the model can be switched via cloud function environment variables. See [DEPLOY.md](DEPLOY.md)
+
 ### Reminders
 - Dashboard: overdue / this week / this month / next month, plus payments to chase, each list exportable
 - Unpaid reminders every N days (default 30) from the latest follow-up or sale date; tick "paid in full" when adding a follow-up to clear them

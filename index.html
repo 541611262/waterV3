@@ -321,6 +321,29 @@
             </div>
         </div>
 
+        <!-- AI 小助手 -->
+        <button type="button" id="aiFab" class="ai-fab" style="display: none;" title="AI 小助手">🤖 小助手</button>
+        <div id="aiPanel" class="ai-panel" role="dialog" aria-label="AI 小助手">
+            <div class="ai-header">
+                <div>
+                    <strong>🤖 滤芯小助手</strong>
+                    <span id="aiRemaining" class="ai-remaining">每人每天 50 次</span>
+                </div>
+                <div class="ai-header-actions">
+                    <button type="button" id="aiClearBtn" class="link-btn">清空对话</button>
+                    <button type="button" id="aiCloseBtn" class="ai-close" title="关闭">&times;</button>
+                </div>
+            </div>
+            <div id="aiMessages" class="ai-messages"></div>
+            <div id="aiStatus" class="ai-status" style="display: none;"></div>
+            <div id="aiChips" class="ai-chips"></div>
+            <div class="ai-input-row">
+                <textarea id="aiInput" rows="2" placeholder="问我任何关于客户和换芯的问题，Enter 发送，Shift+Enter 换行"></textarea>
+                <button type="button" id="aiSendBtn">发送</button>
+            </div>
+            <p class="ai-notice">AI 生成，仅供参考。你输入的内容会发送给 DeepSeek；客户电话会自动打码。修改数据前都会请你确认。</p>
+        </div>
+
         <!-- 批量删除确认（点击弹窗外部不会关闭，必须输入“删除”才能确认） -->
         <div id="batchDeleteModal" class="modal" style="display: none;">
             <div class="modal-content">
@@ -490,5 +513,6 @@
     <script src="config.js"></script>
     <script src="cloud.js"></script>
     <script src="app.js"></script>
+    <script src="assistant.js"></script>
 </body>
 </html>
