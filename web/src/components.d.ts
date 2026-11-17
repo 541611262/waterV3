@@ -71,6 +71,7 @@ declare module 'vue' {
     ReplacementFormDialog: typeof import('./components/ReplacementFormDialog.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    StagesDialog: typeof import('./components/StagesDialog.vue')['default']
     StatCard: typeof import('./components/StatCard.vue')['default']
     WorkOrderFormDialog: typeof import('./components/WorkOrderFormDialog.vue')['default']
   }

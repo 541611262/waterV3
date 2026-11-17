@@ -636,3 +636,14 @@ export async function receivableSummary(): Promise<ReceivableSummary> {
     collectedThisMonth: paymentRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0),
   }
 }
+
+/** 同型号的其他设备中已经设置过的分级（用于复制） */
+export async function findStagesByModel(model: string, excludeDeviceId: string): Promise<{ device_id: string; stages: FilterStageOverview[] } | null> {
+  if (!model.trim()) return null
+  const rdb = await db()
+  const devices = unwrap<{ id: string }[]>(
+    await rdb.from('device_overview').select('id').eq('model', model).gt('stage_count', 0).neq('id', excludeDeviceId).limit(1),
+  )
+  if (!devices.length) return null
+  return { device_id: devices[0]!.id, stages: await listStages(devices[0]!.id) }
+}
