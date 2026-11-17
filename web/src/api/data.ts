@@ -647,3 +647,26 @@ export async function findStagesByModel(model: string, excludeDeviceId: string):
   if (!devices.length) return null
   return { device_id: devices[0]!.id, stages: await listStages(devices[0]!.id) }
 }
+
+export interface WorkOrderFact {
+  status: WorkOrderStatus
+  type: string
+  assignee_id: string | null
+  completed_by: string | null
+  completed_at: string | null
+  created_at: string
+}
+
+export async function fetchWorkOrdersSince(start: string): Promise<WorkOrderFact[]> {
+  const rdb = await db()
+  return (
+    unwrap<WorkOrderFact[]>(
+      await rdb
+        .from('work_orders')
+        .select('status, type, assignee_id, completed_by, completed_at, created_at')
+        .is('deleted_at', null)
+        .gte('created_at', start)
+        .limit(10000),
+    ) ?? []
+  )
+}
