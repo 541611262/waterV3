@@ -12,6 +12,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AppChart: typeof import('./components/charts/AppChart.vue')['default']
+    AssistantPanel: typeof import('./components/AssistantPanel.vue')['default']
     BatchDispatchDialog: typeof import('./components/BatchDispatchDialog.vue')['default']
     BrandMark: typeof import('./components/BrandMark.vue')['default']
     ClientFormDialog: typeof import('./components/ClientFormDialog.vue')['default']

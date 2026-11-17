@@ -4,6 +4,7 @@ import { useDark, useMediaQuery, useStorage, useToggle } from '@vueuse/core'
 import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { appConfig } from '@/config'
+import AssistantPanel from '@/components/AssistantPanel.vue'
 import AppSidebar from '@/layouts/AppSidebar.vue'
 import { useSessionStore } from '@/stores/session'
 
@@ -99,6 +100,7 @@ async function onCommand(command: string) {
         </router-view>
       </main>
     </div>
+    <AssistantPanel />
   </div>
 </template>
 

@@ -114,6 +114,11 @@ export interface DeviceQuery extends PageQuery {
   ownerId?: string
   region?: string
   clientId?: string
+  ids?: string[]
+  /** 距到期天数下限（含） */
+  dueMin?: number
+  /** 距到期天数上限（含），可为负数 */
+  dueWithin?: number
 }
 
 export async function listDevices(q: DeviceQuery): Promise<Page<DeviceOverview>> {
@@ -127,6 +132,9 @@ export async function listDevices(q: DeviceQuery): Promise<Page<DeviceOverview>>
   if (q.ownerId) query = query.eq('owner_id', q.ownerId)
   if (q.region) query = query.eq('region', q.region)
   if (q.clientId) query = query.eq('client_id', q.clientId)
+  if (q.ids?.length) query = query.in('id', q.ids)
+  if (q.dueMin !== undefined) query = query.gte('days_until_due', q.dueMin)
+  if (q.dueWithin !== undefined) query = query.lte('days_until_due', q.dueWithin)
   query = applySort(query, q.sort, { field: 'next_due_on', order: 'asc' })
   return pageOf<DeviceOverview>(query.range(...range(q)))
 }
