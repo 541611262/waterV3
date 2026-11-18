@@ -450,7 +450,7 @@ function onKey(event: KeyboardEvent | Event) {
   color: var(--brand-600);
 }
 .msg {
-  max-width: 88%;
+  max-width: 92%;
   padding: 10px 14px;
   border-radius: 16px;
   font-size: 14px;
@@ -485,6 +485,66 @@ function onKey(event: KeyboardEvent | Event) {
   color: var(--brand-600);
   text-decoration: none;
   font-weight: 500;
+}
+.msg.assistant :deep(.ai-heading) {
+  margin: 10px 0 4px;
+}
+.msg.assistant :deep(.ai-heading:first-child) {
+  margin-top: 0;
+}
+.msg.assistant :deep(.ai-table) {
+  overflow-x: auto;
+  margin: 6px 0 8px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+}
+.msg.assistant :deep(table) {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.msg.assistant :deep(th),
+.msg.assistant :deep(td) {
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--app-border);
+  white-space: nowrap;
+}
+.msg.assistant :deep(td:last-child) {
+  white-space: normal;
+  min-width: 80px;
+}
+.msg.assistant :deep(th) {
+  background: var(--app-surface-muted);
+  color: var(--app-text-2);
+  font-weight: 600;
+}
+.msg.assistant :deep(tbody tr:last-child td) {
+  border-bottom: none;
+}
+.msg.assistant :deep(blockquote) {
+  margin: 6px 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--tone-warning);
+  background: var(--tone-warning-bg);
+  border-radius: 0 8px 8px 0;
+}
+.msg.assistant :deep(hr) {
+  border: none;
+  border-top: 1px dashed var(--app-border);
+  margin: 10px 0;
+}
+.msg.assistant :deep(code) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--app-surface-muted);
+}
+.msg.assistant :deep(li + li) {
+  margin-top: 2px;
 }
 .msg.error {
   align-self: flex-start;
