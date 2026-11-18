@@ -74,7 +74,10 @@
 | `AI_MODEL` | 模型名称，如 `deepseek-flash`、`deepseek-v4-pro` | `deepseek-flash` |
 | `AI_BASE_URL` | 接口地址；换成其他兼容 OpenAI 格式的服务时修改 | `https://api.deepseek.com` |
 | `AI_DAILY_LIMIT` | 每人每天的提问次数 | `50` |
-| `AI_MAX_TOKENS` | 单次回答的最大长度 | `1500` |
+| `AI_MAX_TOKENS` | 单次回答的最大长度 | `4000` |
+| `AI_THINKING` | 思考模式：`disabled`（快、省）/ `low` / `high` / `max`（更慢、更贵，复杂规划更好） | `disabled` |
+
+**思考模式**：DeepSeek 当前的模型（`deepseek-flash`、`deepseek-v4-pro`）默认开启思考模式，思考过程也计入回答长度，而且带工具调用时必须把 `reasoning_content` 原样传回，否则返回 400。云函数默认关闭思考模式；设置 `AI_THINKING` 后，只有当网页把每条助手消息的 `reasoning_content` 都带回时才开启（V4 网页会带回，V3 网页不带回时自动按非思考模式回答）。
 
 模型名称以服务商当时的官方文档为准；如果出现"模型不存在"的报错，通常是模型改名了，更新 `AI_MODEL` 即可。换用其他厂商时，需先测试工具调用（查询、确认卡片）是否正常。
 

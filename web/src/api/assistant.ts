@@ -14,11 +14,12 @@ export interface ChatMessage {
   content: string
   tool_calls?: ToolCall[]
   tool_call_id?: string
+  reasoning_content?: string
 }
 
 export interface AssistantReply {
   ok: boolean
-  message?: { content?: string; tool_calls?: ToolCall[] }
+  message?: { content?: string; tool_calls?: ToolCall[]; reasoning_content?: string }
   remaining?: number
   limit?: number
   error?: string

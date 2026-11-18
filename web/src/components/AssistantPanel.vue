@@ -94,7 +94,13 @@ async function ask(text?: string) {
       }
       const message = reply.message ?? {}
       const calls = message.tool_calls ?? []
-      history.push({ role: 'assistant', content: message.content ?? '', ...(calls.length ? { tool_calls: calls } : {}) })
+      // 思考模式下要把 reasoning_content 原样带回给云函数（DeepSeek 的要求）
+      history.push({
+        role: 'assistant',
+        content: message.content ?? '',
+        ...(calls.length ? { tool_calls: calls } : {}),
+        ...(message.reasoning_content ? { reasoning_content: message.reasoning_content } : {}),
+      })
       if (!calls.length) {
         await addAssistant(message.content || '（没有回答）')
         return

@@ -9,7 +9,8 @@
 //   AI_MODEL          模型名称，默认 deepseek-flash（可改为 deepseek-v4-pro）
 //   AI_BASE_URL       接口地址，默认 https://api.deepseek.com
 //   AI_DAILY_LIMIT    每人每天的提问次数，默认 50
-//   AI_MAX_TOKENS     单次回答的最大长度，默认 1500
+//   AI_MAX_TOKENS     单次回答的最大长度，默认 4000
+//   AI_THINKING       思考模式：disabled（默认，快、省）/ low / high / max（更慢、更贵，复杂规划时更好）
 
 const ENV_ID = process.env.CLOUDBASE_ENV_ID || 'water-storage-d0ggf2m9faaadb034';
 const GATEWAY = (process.env.CLOUDBASE_GATEWAY || `https://${ENV_ID}.api.tcloudbasegateway.com`).replace(/\/+$/, '');
@@ -19,12 +20,16 @@ const CONFIG = {
     model: process.env.AI_MODEL || 'deepseek-flash',
     baseUrl: (process.env.AI_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, ''),
     dailyLimit: parseInt(process.env.AI_DAILY_LIMIT, 10) || 50,
-    maxTokens: parseInt(process.env.AI_MAX_TOKENS, 10) || 1500
+    maxTokens: parseInt(process.env.AI_MAX_TOKENS, 10) || 4000,
+    thinking: ['low', 'high', 'max'].includes(String(process.env.AI_THINKING || '').toLowerCase())
+        ? String(process.env.AI_THINKING).toLowerCase()
+        : 'disabled'
 };
 
 const MAX_MESSAGES = 40;
 const MAX_USER_CHARS = 2000;
 const MAX_TOOL_CHARS = 16000;
+const MAX_REASONING_CHARS = 20000;
 const MODEL_TIMEOUT_MS = 55000;
 
 // ---------- 工具定义（在浏览器中执行，名称需与 assistant.js 保持一致） ----------
@@ -170,6 +175,10 @@ function sanitizeMessages(raw) {
             clean.push({ role: 'user', content: content.slice(0, MAX_USER_CHARS) });
         } else if (m.role === 'assistant') {
             const message = { role: 'assistant', content: content.slice(0, MAX_TOOL_CHARS) };
+            // 思考模式下带工具调用时，DeepSeek 要求把之前的 reasoning_content 原样传回
+            if (typeof m.reasoning_content === 'string' && m.reasoning_content) {
+                message.reasoning_content = m.reasoning_content.slice(0, MAX_REASONING_CHARS);
+            }
             if (Array.isArray(m.tool_calls) && m.tool_calls.length) {
                 message.tool_calls = m.tool_calls.slice(0, 8).map(call => ({
                     id: String(call.id || ''),
@@ -219,7 +228,20 @@ function describeModelError(status, text) {
     return `AI 服务调用失败（HTTP ${status}）`;
 }
 
+// 思考模式只在历史中每条助手消息都带有 reasoning_content 时开启（否则 DeepSeek 会返回 400）；
+// 旧版网页不回传 reasoning_content，会自动按非思考模式回答，不会出错
+function shouldThink(messages) {
+    if (CONFIG.thinking === 'disabled') return false;
+    return messages.every(m => m.role !== 'assistant' || Boolean(m.reasoning_content));
+}
+
 async function callModel(messages, userName, role) {
+    const thinking = shouldThink(messages);
+    const sent = thinking ? messages : messages.map(m => {
+        if (m.role !== 'assistant' || !m.reasoning_content) return m;
+        const { reasoning_content: _omit, ...rest } = m;
+        return rest;
+    });
     let response;
     try {
         response = await fetchWithTimeout(`${CONFIG.baseUrl}/chat/completions`, {
@@ -227,12 +249,14 @@ async function callModel(messages, userName, role) {
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${CONFIG.apiKey}` },
             body: JSON.stringify({
                 model: CONFIG.model,
-                messages: [{ role: 'system', content: systemPrompt(userName, role) }, ...messages],
+                messages: [{ role: 'system', content: systemPrompt(userName, role) }, ...sent],
                 tools: TOOLS,
                 tool_choice: 'auto',
                 temperature: 0.3,
                 max_tokens: CONFIG.maxTokens,
-                stream: false
+                stream: false,
+                thinking: { type: thinking ? 'enabled' : 'disabled' },
+                ...(thinking ? { reasoning_effort: CONFIG.thinking } : {})
             })
         }, MODEL_TIMEOUT_MS);
     } catch (error) {
@@ -250,7 +274,24 @@ async function callModel(messages, userName, role) {
     if (Array.isArray(choice.message.tool_calls) && choice.message.tool_calls.length) {
         message.tool_calls = choice.message.tool_calls;
     }
-    return { message, finishReason: choice.finish_reason, usage: data.usage };
+    if (thinking && typeof choice.message.reasoning_content === 'string' && choice.message.reasoning_content) {
+        message.reasoning_content = choice.message.reasoning_content.slice(0, MAX_REASONING_CHARS);
+    }
+    const finishReason = choice.finish_reason;
+    if (!message.content && !message.tool_calls) {
+        // 以前这种情况网页只显示"（没有回答）"，现在给出原因
+        if (finishReason === 'length') {
+            throw new AppError('TRUNCATED', '这个问题需要的回答太长了，请把范围缩小一点再问（例如只问某个区域，或只问今明两天）');
+        }
+        if (finishReason === 'content_filter') {
+            throw new AppError('FILTERED', 'AI 服务拒绝回答这个问题，请换个说法再试');
+        }
+        throw new AppError('EMPTY_ANSWER', 'AI 这次没有给出回答，请换个说法再试');
+    }
+    if (finishReason === 'length' && message.content && !message.tool_calls) {
+        message.content += '\n\n（回答太长，后面的内容被截断了。可以缩小范围再问。）';
+    }
+    return { message, finishReason, usage: data.usage, thinking };
 }
 
 // ---------- 入口 ----------
@@ -273,7 +314,10 @@ exports.main = async (event) => {
 
         const userName = typeof input.userName === 'string' ? input.userName.slice(0, 50) : '';
         const result = await callModel(messages, userName, input.userRole);
-        return { ok: true, message: result.message, finishReason: result.finishReason, remaining: quota.remaining, limit: quota.limit, model: CONFIG.model };
+        return {
+            ok: true, message: result.message, finishReason: result.finishReason,
+            remaining: quota.remaining, limit: quota.limit, model: CONFIG.model, thinking: result.thinking
+        };
     } catch (error) {
         if (error instanceof AppError) return fail(error.code, error.message, error.extra);
         console.error('ai-chat error', error);
@@ -282,4 +326,4 @@ exports.main = async (event) => {
 };
 
 // 供本地测试使用
-exports._internal = { sanitizeMessages, systemPrompt, beijingToday, TOOLS };
+exports._internal = { sanitizeMessages, systemPrompt, beijingToday, TOOLS, shouldThink, CONFIG };
