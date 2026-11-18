@@ -1,9 +1,17 @@
 <script setup lang="ts">
 // AI 小助手：右下角悬浮按钮 + 对话面板。工具在浏览器中执行（tools.ts），只用当前账号能看到的数据
-import { ChatDotRound, Close, Promotion } from '@element-plus/icons-vue'
-import { useMediaQuery } from '@vueuse/core'
+import { ArrowDown, ChatDotRound, Close, Promotion } from '@element-plus/icons-vue'
+import { useMediaQuery, useStorage } from '@vueuse/core'
 import { nextTick, reactive, ref } from 'vue'
-import { applyProposal, callAssistant, type AssistantReply, type ChatMessage } from '@/api/assistant'
+import {
+  applyProposal,
+  ASSISTANT_MODES,
+  callAssistant,
+  type AssistantMode,
+  type AssistantPayload,
+  type AssistantReply,
+  type ChatMessage,
+} from '@/api/assistant'
 import { describeError } from '@/api/cloud'
 import { listDevices } from '@/api/data'
 import { appConfig } from '@/config'
@@ -22,6 +30,11 @@ const input = ref('')
 const busy = ref(false)
 const status = ref('')
 const remaining = ref('')
+// 每人自己选择的档位，记在本机；默认「快速」
+const mode = useStorage<AssistantMode>('v4.ai.mode', 'flash')
+const allowPro = ref(true)
+const modeInfo = () => ASSISTANT_MODES.find((m) => m.key === mode.value) ?? ASSISTANT_MODES[0]!
+const modeNote = ref('')
 const scroller = ref<HTMLElement>()
 
 type Item = { kind: 'user' | 'assistant' | 'error'; text: string; html?: string } | { kind: 'proposal'; proposal: Proposal }
@@ -30,7 +43,7 @@ let history: ChatMessage[] = []
 const tokenData: TokenData = reactive({ phones: new Map(), clients: new Map() })
 
 // 测试时可以通过 window.__aiTransport 注入模拟回答
-type Transport = (payload: { messages: ChatMessage[]; userName: string; userRole: string }) => Promise<AssistantReply>
+type Transport = (payload: AssistantPayload) => Promise<AssistantReply>
 const transport = (): Transport => (window as unknown as { __aiTransport?: Transport }).__aiTransport ?? callAssistant
 
 async function scrollDown() {
@@ -85,8 +98,21 @@ async function ask(text?: string) {
   try {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       status.value = round === 0 ? '思考中…' : '正在查询数据…'
-      const reply = await transport()({ messages: history, userName: session.member?.username ?? '', userRole: session.member?.role ?? 'member' })
+      const reply = await transport()({
+        messages: history,
+        userName: session.member?.username ?? '',
+        userRole: session.member?.role ?? 'member',
+        model: mode.value === 'flash' ? 'flash' : 'pro',
+        thinking: mode.value === 'pro-thinking',
+      })
       if (Number.isFinite(reply.remaining) && Number.isFinite(reply.limit)) remaining.value = `今日剩余 ${reply.remaining} / ${reply.limit} 次`
+      if (reply.allowPro === false) {
+        allowPro.value = false
+        if (mode.value !== 'flash') {
+          mode.value = 'flash'
+          modeNote.value = '管理员已关闭「高级」档，本次按「快速」回答'
+        }
+      }
       if (!reply.ok) {
         history.length = checkpoint
         items.value.push({ kind: 'error', text: reply.error ?? '小助手暂时不可用' })
@@ -175,6 +201,28 @@ function onKey(event: KeyboardEvent | Event) {
               <span>{{ remaining || '查询客户、到期提醒、登记跟踪与换芯' }}</span>
             </div>
           </div>
+          <el-dropdown trigger="click" :disabled="busy" @command="(m: AssistantMode) => ((mode = m), (modeNote = ''))">
+            <button class="mode-btn" :title="modeInfo().hint">
+              {{ modeInfo().label }}
+              <el-icon><ArrowDown /></el-icon>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item
+                  v-for="m in ASSISTANT_MODES"
+                  :key="m.key"
+                  :command="m.key"
+                  :disabled="m.key !== 'flash' && !allowPro"
+                  :class="{ 'mode-active': m.key === mode }"
+                >
+                  <div class="mode-item">
+                    <strong>{{ m.label }}{{ m.key === mode ? ' ✓' : '' }}</strong>
+                    <span>{{ m.key !== 'flash' && !allowPro ? '管理员已关闭' : m.hint }}</span>
+                  </div>
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <el-button v-if="items.length" link size="small" @click="clearChat">清空</el-button>
           <button class="close" aria-label="关闭" @click="open = false"><el-icon><Close /></el-icon></button>
         </header>
@@ -208,6 +256,7 @@ function onKey(event: KeyboardEvent | Event) {
               <div v-else class="proposal-status">{{ item.proposal.message }}</div>
             </div>
           </template>
+          <div v-if="modeNote" class="msg error">{{ modeNote }}</div>
           <div v-if="busy" class="msg assistant typing"><span /><span /><span /> {{ status }}</div>
         </div>
 
@@ -321,6 +370,38 @@ function onKey(event: KeyboardEvent | Event) {
   background: var(--brand-gradient);
   box-shadow: 0 0 0 4px var(--brand-50);
   flex-shrink: 0;
+}
+.mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
+  color: var(--app-text-2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mode-btn:hover {
+  color: var(--brand-600);
+  border-color: var(--el-color-primary-light-7);
+}
+.mode-item {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.5;
+  padding: 2px 0;
+  max-width: 260px;
+  white-space: normal;
+}
+.mode-item span {
+  font-size: 12px;
+  color: var(--app-text-3);
 }
 .close {
   border: none;

@@ -94,8 +94,10 @@ https://water-storage-d0ggf2m9faaadb034-1374271205.tcloudbaseapp.com/water/
 | 环境变量 | 作用 | 默认值 |
 |---|---|---|
 | `DEEPSEEK_API_KEY` | API 密钥（必填） | — |
-| `AI_MODEL` | 模型，如 `deepseek-flash`、`deepseek-v4-pro` | `deepseek-flash` |
+| `AI_MODEL` | 聊天窗口「快速」档（默认）用的模型 | `deepseek-flash` |
 | `AI_BASE_URL` | 接口地址，换用其他兼容 OpenAI 格式的服务时修改 | `https://api.deepseek.com` |
+| `AI_PRO_MODEL` | 聊天窗口「高级」档用的模型 | `deepseek-v4-pro` |
+| `AI_ALLOW_PRO` | 是否允许同事在聊天窗口选「高级」档；设为 `false` 后一律用 `AI_MODEL` | `true` |
 | `AI_DAILY_LIMIT` | 每人每天的提问次数 | `50` |
 | `AI_MAX_TOKENS` | 单次回答的最大长度 | `4000` |
 | `AI_THINKING` | 思考模式：`disabled`（快、省）/ `low` / `high` / `max`（更慢、更贵，复杂规划更好） | `disabled` |

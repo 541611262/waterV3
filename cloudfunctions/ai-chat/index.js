@@ -6,11 +6,14 @@
 //
 // 环境变量（在云函数配置中修改，保存后下一次提问即生效）：
 //   DEEPSEEK_API_KEY  必填，API 密钥，只保存在这里
-//   AI_MODEL          模型名称，默认 deepseek-flash（可改为 deepseek-v4-pro）
+//   AI_MODEL          「快速」档的模型，默认 deepseek-flash
+//   AI_PRO_MODEL      「高级」档的模型，默认 deepseek-v4-pro
+//   AI_ALLOW_PRO      是否允许同事在聊天窗口选择「高级」档，默认 true；设为 false 则一律用快速档
 //   AI_BASE_URL       接口地址，默认 https://api.deepseek.com
 //   AI_DAILY_LIMIT    每人每天的提问次数，默认 50
 //   AI_MAX_TOKENS     单次回答的最大长度，默认 4000
-//   AI_THINKING       思考模式：disabled（默认，快、省）/ low / high / max（更慢、更贵，复杂规划时更好）
+//   AI_THINKING       默认思考模式：disabled（默认，快、省）/ low / high / max（更慢、更贵，复杂规划时更好）
+//                     同事在聊天窗口选择「深度思考」时，按这里的强度；这里为 disabled 时按 low
 
 const ENV_ID = process.env.CLOUDBASE_ENV_ID || 'water-storage-d0ggf2m9faaadb034';
 const GATEWAY = (process.env.CLOUDBASE_GATEWAY || `https://${ENV_ID}.api.tcloudbasegateway.com`).replace(/\/+$/, '');
@@ -18,6 +21,8 @@ const GATEWAY = (process.env.CLOUDBASE_GATEWAY || `https://${ENV_ID}.api.tcloudb
 const CONFIG = {
     apiKey: process.env.DEEPSEEK_API_KEY || '',
     model: process.env.AI_MODEL || 'deepseek-flash',
+    proModel: process.env.AI_PRO_MODEL || 'deepseek-v4-pro',
+    allowPro: String(process.env.AI_ALLOW_PRO || 'true').toLowerCase() !== 'false',
     baseUrl: (process.env.AI_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, ''),
     dailyLimit: parseInt(process.env.AI_DAILY_LIMIT, 10) || 50,
     maxTokens: parseInt(process.env.AI_MAX_TOKENS, 10) || 4000,
@@ -219,24 +224,37 @@ async function consumeQuota(accessToken, isNewQuestion) {
     return data || {};
 }
 
-function describeModelError(status, text) {
+function describeModelError(status, text, model) {
     if (status === 401) return 'AI 服务的 API Key 无效，请管理员检查 DEEPSEEK_API_KEY';
     if (status === 402) return 'AI 服务账户余额不足，请管理员充值';
     if (status === 429) return 'AI 服务繁忙，请稍后再试';
-    if (status === 400 && /model/i.test(text)) return `模型「${CONFIG.model}」不可用，可能已改名，请管理员检查 AI_MODEL`;
+    if (status === 400 && /model/i.test(text)) return `模型「${model}」不可用，可能已改名，请管理员检查 AI_MODEL / AI_PRO_MODEL`;
     if (status >= 500) return 'AI 服务暂时不可用，请稍后再试';
     return `AI 服务调用失败（HTTP ${status}）`;
 }
 
 // 思考模式只在历史中每条助手消息都带有 reasoning_content 时开启（否则 DeepSeek 会返回 400）；
 // 旧版网页不回传 reasoning_content，会自动按非思考模式回答，不会出错
-function shouldThink(messages) {
-    if (CONFIG.thinking === 'disabled') return false;
+function shouldThink(messages, wanted) {
+    if (!wanted) return false;
     return messages.every(m => m.role !== 'assistant' || Boolean(m.reasoning_content));
 }
 
-async function callModel(messages, userName, role) {
-    const thinking = shouldThink(messages);
+// 网页只能在允许的档位中选择，不能指定任意模型名
+function resolveChoice(input) {
+    const tier = input.model === 'pro' && CONFIG.allowPro ? 'pro' : 'flash';
+    const wantsThinking = typeof input.thinking === 'boolean' ? input.thinking : CONFIG.thinking !== 'disabled';
+    return {
+        tier,
+        model: tier === 'pro' ? CONFIG.proModel : CONFIG.model,
+        thinking: wantsThinking,
+        effort: CONFIG.thinking === 'disabled' ? 'low' : CONFIG.thinking
+    };
+}
+
+async function callModel(messages, userName, role, choiceInput = {}) {
+    const choiceOf = resolveChoice(choiceInput);
+    const thinking = shouldThink(messages, choiceOf.thinking);
     const sent = thinking ? messages : messages.map(m => {
         if (m.role !== 'assistant' || !m.reasoning_content) return m;
         const { reasoning_content: _omit, ...rest } = m;
@@ -248,7 +266,7 @@ async function callModel(messages, userName, role) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${CONFIG.apiKey}` },
             body: JSON.stringify({
-                model: CONFIG.model,
+                model: choiceOf.model,
                 messages: [{ role: 'system', content: systemPrompt(userName, role) }, ...sent],
                 tools: TOOLS,
                 tool_choice: 'auto',
@@ -256,7 +274,7 @@ async function callModel(messages, userName, role) {
                 max_tokens: CONFIG.maxTokens,
                 stream: false,
                 thinking: { type: thinking ? 'enabled' : 'disabled' },
-                ...(thinking ? { reasoning_effort: CONFIG.thinking } : {})
+                ...(thinking ? { reasoning_effort: choiceOf.effort } : {})
             })
         }, MODEL_TIMEOUT_MS);
     } catch (error) {
@@ -265,7 +283,7 @@ async function callModel(messages, userName, role) {
     const text = await response.text();
     if (!response.ok) {
         console.error('model error', response.status, text.slice(0, 500));
-        throw new AppError('MODEL_ERROR', describeModelError(response.status, text));
+        throw new AppError('MODEL_ERROR', describeModelError(response.status, text, choiceOf.model));
     }
     const data = JSON.parse(text);
     const choice = data.choices && data.choices[0];
@@ -291,7 +309,7 @@ async function callModel(messages, userName, role) {
     if (finishReason === 'length' && message.content && !message.tool_calls) {
         message.content += '\n\n（回答太长，后面的内容被截断了。可以缩小范围再问。）';
     }
-    return { message, finishReason, usage: data.usage, thinking };
+    return { message, finishReason, usage: data.usage, thinking, tier: choiceOf.tier, model: choiceOf.model };
 }
 
 // ---------- 入口 ----------
@@ -313,10 +331,11 @@ exports.main = async (event) => {
         }
 
         const userName = typeof input.userName === 'string' ? input.userName.slice(0, 50) : '';
-        const result = await callModel(messages, userName, input.userRole);
+        const result = await callModel(messages, userName, input.userRole, { model: input.model, thinking: input.thinking });
         return {
             ok: true, message: result.message, finishReason: result.finishReason,
-            remaining: quota.remaining, limit: quota.limit, model: CONFIG.model, thinking: result.thinking
+            remaining: quota.remaining, limit: quota.limit, model: result.model, tier: result.tier, thinking: result.thinking,
+            allowPro: CONFIG.allowPro
         };
     } catch (error) {
         if (error instanceof AppError) return fail(error.code, error.message, error.extra);
@@ -326,4 +345,4 @@ exports.main = async (event) => {
 };
 
 // 供本地测试使用
-exports._internal = { sanitizeMessages, systemPrompt, beijingToday, TOOLS, shouldThink, CONFIG };
+exports._internal = { sanitizeMessages, systemPrompt, beijingToday, TOOLS, shouldThink, resolveChoice, CONFIG };

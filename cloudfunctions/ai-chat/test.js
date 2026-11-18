@@ -183,6 +183,28 @@ function listen(handler) {
     console.log('✔ 旧版网页没有带回 reasoning_content → 自动改用非思考模式');
     delete process.env.AI_THINKING;
 
+    // ---------- 网页选择模型档位 ----------
+    delete require.cache[require.resolve(fnPath)];
+    fn = require(fnPath);
+    modelMode = 'text'; usage.questions = 0; usage.calls = 0;
+    r = await fn.main({ accessToken: VALID_TOKEN, model: 'pro', messages: [{ role: 'user', content: 'q' }] });
+    assert.ok(r.ok); assert.strictEqual(lastModelRequest.body.model, 'deepseek-v4-pro'); assert.strictEqual(r.tier, 'pro');
+    r = await fn.main({ accessToken: VALID_TOKEN, model: 'gpt-5-super-expensive', messages: [{ role: 'user', content: 'q' }] });
+    assert.ok(r.ok); assert.strictEqual(lastModelRequest.body.model, 'deepseek-flash', '只能选允许的档位，不能指定任意模型');
+    console.log('✔ 网页可选「高级」档（deepseek-v4-pro）；指定其他模型名无效，按快速档');
+    usage.questions = 0; usage.calls = 0;
+    r = await fn.main({ accessToken: VALID_TOKEN, model: 'pro', thinking: true, messages: [{ role: 'user', content: 'q' }] });
+    assert.ok(r.ok); assert.deepStrictEqual(lastModelRequest.body.thinking, { type: 'enabled' }); assert.strictEqual(lastModelRequest.body.reasoning_effort, 'low');
+    console.log('✔ 网页选「深度思考」→ 开启思考模式（默认强度 low）');
+    process.env.AI_ALLOW_PRO = 'false';
+    delete require.cache[require.resolve(fnPath)];
+    fn = require(fnPath);
+    usage.questions = 0; usage.calls = 0;
+    r = await fn.main({ accessToken: VALID_TOKEN, model: 'pro', messages: [{ role: 'user', content: 'q' }] });
+    assert.ok(r.ok); assert.strictEqual(lastModelRequest.body.model, 'deepseek-flash'); assert.strictEqual(r.allowPro, false);
+    console.log('✔ 管理员设置 AI_ALLOW_PRO=false 后，选「高级」也按快速档');
+    delete process.env.AI_ALLOW_PRO;
+
     gateway.close(); model.close();
     console.log('\n全部通过');
 })().catch(error => { console.error('✘ 测试失败:', error); process.exit(1); });

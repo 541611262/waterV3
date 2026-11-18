@@ -17,8 +17,30 @@ export interface ChatMessage {
   reasoning_content?: string
 }
 
+/** 聊天窗口可选的档位（云函数只接受这几种，不能指定任意模型） */
+export type AssistantMode = 'flash' | 'pro' | 'pro-thinking'
+
+export const ASSISTANT_MODES: { key: AssistantMode; label: string; hint: string }[] = [
+  { key: 'flash', label: '快速', hint: 'deepseek-flash：回答快、费用低，日常查询够用' },
+  { key: 'pro', label: '高级', hint: 'deepseek-v4-pro：多步查询、排计划更可靠，费用约为快速的 4 倍' },
+  { key: 'pro-thinking', label: '高级 · 深度思考', hint: '先思考再回答，复杂规划最好，回答会慢几秒' },
+]
+
+export interface AssistantPayload {
+  messages: ChatMessage[]
+  userName: string
+  userRole: string
+  model?: 'flash' | 'pro'
+  thinking?: boolean
+}
+
 export interface AssistantReply {
   ok: boolean
+  /** 实际使用的档位 / 模型 */
+  tier?: 'flash' | 'pro'
+  model?: string
+  /** 管理员是否允许选择高级档 */
+  allowPro?: boolean
   message?: { content?: string; tool_calls?: ToolCall[]; reasoning_content?: string }
   remaining?: number
   limit?: number
@@ -26,7 +48,7 @@ export interface AssistantReply {
 }
 
 /** 通过网关调用云函数；登录凭证同时放在请求体里，由云函数交给数据库校验身份和扣减次数 */
-export async function callAssistant(payload: { messages: ChatMessage[]; userName: string; userRole: string }): Promise<AssistantReply> {
+export async function callAssistant(payload: AssistantPayload): Promise<AssistantReply> {
   const accessToken = await getAccessToken()
   let response: Response
   try {
@@ -54,7 +76,15 @@ export async function callAssistant(payload: { messages: ChatMessage[]; userName
   const remaining = typeof data.remaining === 'number' ? data.remaining : undefined
   const limit = typeof data.limit === 'number' ? data.limit : undefined
   if (!data.ok) return { ok: false, error: String(data.message ?? '小助手暂时不可用，请稍后再试'), remaining, limit }
-  return { ok: true, message: data.message as AssistantReply['message'], remaining, limit }
+  return {
+    ok: true,
+    message: data.message as AssistantReply['message'],
+    remaining,
+    limit,
+    tier: data.tier === 'pro' ? 'pro' : data.tier === 'flash' ? 'flash' : undefined,
+    model: typeof data.model === 'string' ? data.model : undefined,
+    allowPro: typeof data.allowPro === 'boolean' ? data.allowPro : undefined,
+  }
 }
 
 /** 用户点击确认后执行修改（与手动操作走相同的数据接口和权限） */
