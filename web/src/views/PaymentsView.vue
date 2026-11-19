@@ -164,7 +164,7 @@ onMounted(refresh)
           <template #default="{ row }">
             <template v-if="!row.settled">
               <el-button link type="primary" @click="pay(row as ReceivableOverview)">登记收款</el-button>
-              <el-button link @click="remind(row as ReceivableOverview)">催款记录</el-button>
+              <el-button link @click="remind(row as ReceivableOverview)">记一次催款</el-button>
               <el-dropdown trigger="click">
                 <el-button link>更多</el-button>
                 <template #dropdown>
@@ -198,7 +198,7 @@ onMounted(refresh)
           <el-progress v-if="r.amount !== null" :percentage="progress(r)" :stroke-width="6" :show-text="false" />
           <div v-if="!r.settled" class="card-actions">
             <el-button size="small" type="primary" round @click="pay(r)">登记收款</el-button>
-            <el-button size="small" round @click="remind(r)">催款记录</el-button>
+            <el-button size="small" round @click="remind(r)">记一次催款</el-button>
           </div>
         </div>
       </div>

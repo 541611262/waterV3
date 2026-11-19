@@ -80,6 +80,24 @@ a.stat:hover {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 手机上卡片窄：去掉图标、缩小间距，让下面的待办列表在第一屏就能看到；说明文字换行显示完整 */
+@media (max-width: 600px) {
+  .stat {
+    padding: 12px 14px;
+  }
+  .icon {
+    display: none;
+  }
+  .value {
+    font-size: 24px;
+    margin-top: 2px;
+  }
+  .hint {
+    white-space: normal;
+    line-height: 1.4;
+    margin-top: 2px;
+  }
+}
 .tone-danger {
   --tone-color: var(--tone-danger);
   --tone-bg: var(--tone-danger-bg);

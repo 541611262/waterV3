@@ -141,7 +141,17 @@ export async function listDevices(q: DeviceQuery): Promise<Page<DeviceOverview>>
 
 export async function listClientDevices(clientId: string): Promise<DeviceOverview[]> {
   const rdb = await db()
-  return unwrap(await rdb.from('device_overview').select('*').eq('client_id', clientId).order('created_at')) ?? []
+  // 最急的排在前面；没有日期的放最后
+  return (
+    unwrap(
+      await rdb
+        .from('device_overview')
+        .select('*')
+        .eq('client_id', clientId)
+        .order('next_due_on', { ascending: true, nullsFirst: false })
+        .order('created_at'),
+    ) ?? []
+  )
 }
 
 export async function getDevice(id: string): Promise<Device | null> {

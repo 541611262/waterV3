@@ -97,7 +97,7 @@ async function submit() {
           <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="error" />
           <el-button type="primary" native-type="submit" :loading="loading" class="submit">登录</el-button>
         </el-form>
-        <p class="hint">忘记密码请联系管理员在云开发控制台重置。</p>
+        <p class="hint">忘记密码请联系管理员重置。</p>
       </div>
     </section>
   </div>

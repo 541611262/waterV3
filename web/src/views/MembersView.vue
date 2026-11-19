@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // 成员管理（仅管理员）：查看成员、调整角色。新建账号 / 重置密码在云开发控制台的"身份认证 → 用户管理"中操作。
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useMediaQuery } from '@vueuse/core'
 import { onMounted, ref } from 'vue'
 import { listMembers, setMemberRole } from '@/api/auth'
 import { describeError } from '@/api/cloud'
@@ -12,6 +13,7 @@ import { useSessionStore } from '@/stores/session'
 const session = useSessionStore()
 const members = ref<(Member & { created_at: string })[]>([])
 const loading = ref(false)
+const isMobile = useMediaQuery('(max-width: 600px)')
 
 async function load() {
   loading.value = true
@@ -56,10 +58,27 @@ onMounted(load)
         <a :href="`https://tcb.cloud.tencent.com/dev?envId=${appConfig.cloudbaseEnv}#/identity/user-management`" target="_blank" rel="noopener">
           云开发控制台 → 身份认证 → 用户管理
         </a>
-        中操作；新账号第一次登录后会自动出现在这里，默认为普通成员。
+        中操作（新建时用户类型选「外部用户」，不受套餐人数限制）；新账号第一次登录后会自动出现在这里，默认为普通成员。
       </template>
     </el-alert>
-    <el-table v-loading="loading" :data="members" empty-text="还没有成员">
+    <!-- 手机：卡片列表 -->
+    <div v-if="isMobile" v-loading="loading" class="cards">
+      <el-empty v-if="!members.length && !loading" description="还没有成员" />
+      <div v-for="m in members" :key="m.uid" class="member">
+        <div class="member-main">
+          <div class="member-name">
+            {{ m.username }}
+            <el-tag size="small" :type="m.role === 'admin' ? 'danger' : 'info'">{{ m.role === 'admin' ? '管理员' : '普通成员' }}</el-tag>
+          </div>
+          <div class="sub">加入于 {{ formatBeijingDateTime(m.created_at) }}</div>
+        </div>
+        <span v-if="m.uid === session.uid" class="sub">（你自己）</span>
+        <el-button v-else size="small" round @click="toggleRole(m)">
+          {{ m.role === 'admin' ? '取消管理员' : '设为管理员' }}
+        </el-button>
+      </div>
+    </div>
+    <el-table v-else v-loading="loading" :data="members" empty-text="还没有成员">
       <el-table-column prop="username" label="用户名" min-width="140" />
       <el-table-column label="角色" width="120">
         <template #default="{ row }">
@@ -84,6 +103,26 @@ onMounted(load)
 <style scoped>
 .tip {
   margin-bottom: 12px;
+}
+.member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 2px;
+  border-bottom: 1px solid var(--app-border);
+}
+.member:last-child {
+  border-bottom: none;
+}
+.member-main {
+  flex: 1;
+  min-width: 0;
+}
+.member-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
 }
 .sub {
   color: var(--el-text-color-secondary);

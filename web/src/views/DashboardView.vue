@@ -9,7 +9,9 @@ import {
   fetchReplacementsSince,
   listDevices,
   listReceivables,
+  listWorkOrders,
   type DashboardStats,
+  type WorkOrderRow,
 } from '@/api/data'
 import type { DeviceOverview, ReceivableOverview } from '@/api/types'
 import AppChart, { type ChartOption } from '@/components/charts/AppChart.vue'
@@ -18,7 +20,7 @@ import PhoneLinks from '@/components/PhoneLinks.vue'
 import ReplacementFormDialog from '@/components/ReplacementFormDialog.vue'
 import StatCard from '@/components/StatCard.vue'
 import { todayStr } from '@/lib/dates'
-import { describeRemind, formatMoney } from '@/lib/format'
+import { describeRemind, formatMoney, WORK_ORDER_STATUSES, WORK_ORDER_TYPES } from '@/lib/format'
 import { aggregateByMonth, dueDistribution, recentMonths, type MonthlyRow } from '@/lib/stats'
 import { useSessionStore } from '@/stores/session'
 
@@ -30,6 +32,7 @@ const dueDevices = ref<DeviceOverview[]>([])
 const dueTotal = ref(0)
 const remind = ref<ReceivableOverview[]>([])
 const remindTotal = ref(0)
+const myOrders = ref<WorkOrderRow[]>([])
 const monthly = ref<MonthlyRow[]>([])
 const distribution = ref<{ label: string; value: number }[]>([])
 
@@ -44,18 +47,20 @@ async function load() {
   loading.value = true
   try {
     const months = recentMonths(todayStr(), 6)
-    const [s, devices, receivables, replacements, facts] = await Promise.all([
+    const [s, devices, receivables, replacements, facts, orders] = await Promise.all([
       dashboardStats(session.uid),
       listDevices({ page: 1, pageSize: 8, statuses: ['overdue', 'today', 'week'], sort: { field: 'next_due_on', order: 'asc' } }),
       listReceivables({ page: 1, pageSize: 6, status: 'due' }),
       fetchReplacementsSince(`${months[0]}-01`),
       fetchDeviceFacts(),
+      listWorkOrders({ page: 1, pageSize: 5, statuses: ['pending', 'in_progress'], assigneeId: session.uid, sort: { field: 'scheduled_on', order: 'asc' } }),
     ])
     stats.value = s
     dueDevices.value = devices.rows
     dueTotal.value = devices.total
     remind.value = receivables.rows
     remindTotal.value = receivables.total
+    myOrders.value = orders.rows
     monthly.value = aggregateByMonth(replacements, months)
     distribution.value = dueDistribution(facts.map((f) => f.days_until_due))
   } catch (error) {
@@ -63,6 +68,15 @@ async function load() {
   } finally {
     loading.value = false
   }
+}
+
+function describeSchedule(date: string | null): string {
+  if (!date) return '未定日期'
+  const days = Math.round((Date.parse(date) - Date.parse(todayStr())) / 86400000)
+  if (days === 0) return '今天'
+  if (days === 1) return '明天'
+  if (days < 0) return `已过 ${-days} 天`
+  return date.slice(5).replace('-', '月') + '日'
 }
 
 function openReplacement(row: DeviceOverview) {
@@ -134,23 +148,27 @@ onMounted(load)
       />
     </div>
 
-    <div class="grid-2">
-      <el-card shadow="never">
-        <template #header>
-          <div class="card-header">
-            <span>近 6 个月换芯趋势</span>
-            <router-link to="/reports" class="more">查看报表 →</router-link>
+    <el-card v-if="myOrders.length" shadow="never">
+      <template #header>
+        <div class="card-header">
+          <span>我的工单 <em class="count">{{ stats?.openWorkOrders ?? myOrders.length }}</em></span>
+          <router-link to="/work-orders" class="more">去处理 →</router-link>
+        </div>
+      </template>
+      <router-link v-for="o in myOrders" :key="o.id" to="/work-orders" class="item order">
+        <div class="order-when" :class="{ late: describeSchedule(o.scheduled_on).startsWith('已过') || describeSchedule(o.scheduled_on) === '今天' }">
+          {{ describeSchedule(o.scheduled_on) }}
+        </div>
+        <div class="item-main">
+          <div class="item-title">{{ o.title || WORK_ORDER_TYPES[o.type] }}</div>
+          <div class="item-sub">
+            <span>{{ o.clients?.name ?? '—' }}</span>
+            <span v-if="o.devices?.address || o.devices?.location">{{ o.devices?.address || o.devices?.location }}</span>
           </div>
-        </template>
-        <AppChart :option="trendOption" height="260px" />
-      </el-card>
-      <el-card shadow="never">
-        <template #header>
-          <div class="card-header"><span>设备到期分布</span></div>
-        </template>
-        <AppChart :option="distributionOption" height="260px" />
-      </el-card>
-    </div>
+        </div>
+        <el-tag size="small" :type="WORK_ORDER_STATUSES[o.status].tag" round>{{ WORK_ORDER_STATUSES[o.status].label }}</el-tag>
+      </router-link>
+    </el-card>
 
     <div class="grid-main">
       <el-card shadow="never">
@@ -171,8 +189,10 @@ onMounted(load)
               <PhoneLinks :phone="d.phone" />
             </div>
           </div>
-          <DueTag :days="d.days_until_due" :date="d.next_due_on" />
-          <el-button size="small" type="primary" plain round @click="openReplacement(d)">登记换芯</el-button>
+          <div class="item-actions">
+            <DueTag :days="d.days_until_due" :date="d.next_due_on" />
+            <el-button size="small" type="primary" plain round @click="openReplacement(d)">登记换芯</el-button>
+          </div>
         </div>
       </el-card>
 
@@ -194,6 +214,24 @@ onMounted(load)
           </div>
           <span class="remind">{{ describeRemind(r.days_until_remind) }}</span>
         </div>
+      </el-card>
+    </div>
+
+    <div class="grid-2">
+      <el-card shadow="never">
+        <template #header>
+          <div class="card-header">
+            <span>近 6 个月换芯趋势</span>
+            <router-link to="/reports" class="more">查看报表 →</router-link>
+          </div>
+        </template>
+        <AppChart :option="trendOption" height="260px" />
+      </el-card>
+      <el-card shadow="never">
+        <template #header>
+          <div class="card-header"><span>设备到期分布</span></div>
+        </template>
+        <AppChart :option="distributionOption" height="260px" />
       </el-card>
     </div>
 
@@ -304,6 +342,32 @@ onMounted(load)
   font-size: 12px;
   color: var(--app-text-3);
 }
+.item.order {
+  text-decoration: none;
+  color: inherit;
+  flex-wrap: nowrap;
+}
+.order-when {
+  min-width: 56px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--brand-50);
+  color: var(--brand-600);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  flex-shrink: 0;
+}
+.order-when.late {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--tone-danger);
+}
+.item-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
 .remind {
   font-size: 12px;
   font-weight: 600;
@@ -330,6 +394,14 @@ onMounted(load)
   }
   .hero h2 {
     font-size: 18px;
+  }
+  .item {
+    flex-wrap: wrap;
+  }
+  .item-actions {
+    width: 100%;
+    padding-left: 48px;
+    justify-content: space-between;
   }
 }
 </style>

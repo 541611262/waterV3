@@ -135,7 +135,7 @@ onMounted(() => {
   <el-card shadow="never">
     <el-tabs v-model="tab">
       <el-tab-pane label="我的账号" name="account">
-        <el-descriptions :column="1" border class="block">
+        <el-descriptions :column="1" border class="block" label-width="84px">
           <el-descriptions-item label="用户名">{{ session.member?.username }}</el-descriptions-item>
           <el-descriptions-item label="角色">{{ session.isAdmin ? '管理员（可查看和管理全部数据）' : '普通成员（查看自己负责的客户）' }}</el-descriptions-item>
           <el-descriptions-item label="所在环境">{{ appConfig.envLabel || '正式环境' }}（{{ appConfig.cloudbaseEnv }}）</el-descriptions-item>
