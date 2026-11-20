@@ -94,10 +94,13 @@ https://water-storage-d0ggf2m9faaadb034-1374271205.tcloudbaseapp.com/water/
 | 环境变量 | 作用 | 默认值 |
 |---|---|---|
 | `DEEPSEEK_API_KEY` | API 密钥（必填） | — |
-| `AI_MODEL` | 模型，如 `deepseek-flash`、`deepseek-v4-pro` | `deepseek-flash` |
+| `AI_MODEL` | 聊天窗口「快速」档（默认）用的模型 | `deepseek-flash` |
 | `AI_BASE_URL` | 接口地址，换用其他兼容 OpenAI 格式的服务时修改 | `https://api.deepseek.com` |
+| `AI_PRO_MODEL` | 聊天窗口「高级」档用的模型 | `deepseek-v4-pro` |
+| `AI_ALLOW_PRO` | 是否允许同事在聊天窗口选「高级」档；设为 `false` 后一律用 `AI_MODEL` | `true` |
 | `AI_DAILY_LIMIT` | 每人每天的提问次数 | `50` |
-| `AI_MAX_TOKENS` | 单次回答的最大长度 | `1500` |
+| `AI_MAX_TOKENS` | 单次回答的最大长度 | `4000` |
+| `AI_THINKING` | 思考模式：`disabled`（快、省）/ `low` / `high` / `max`（更慢、更贵，复杂规划更好） | `disabled` |
 
 修改环境变量后保存即可，下一次提问生效，不用重新上传网站。
 
@@ -106,6 +109,8 @@ https://water-storage-d0ggf2m9faaadb034-1374271205.tcloudbaseapp.com/water/
 - 提示"小助手云函数 ai-chat 还没有部署"：函数名称不对或还没部署成功。
 - 提示"次数校验失败"：还没有执行最新的 `schema.sql`。
 - 提示"模型不可用，可能已改名"：到 DeepSeek 官方文档查看当前模型名称，修改 `AI_MODEL`。
+- 提示"回答太长了，请把范围缩小一点"：问题涉及的客户太多，回答超出了 `AI_MAX_TOKENS`。缩小问题范围，或把 `AI_MAX_TOKENS` 调大。
+- DeepSeek 新模型默认开启思考模式，思考过程也占用回答长度；本系统默认关闭（`AI_THINKING=disabled`）。以前偶尔显示"（没有回答）"就是思考用完了长度。
 - 返回 `EXCEED_AUTHORITY` / `ACTION_FORBIDDEN`：在云函数的权限设置中允许已登录用户调用 `ai-chat`。
 
 ## 用命令行部署（可选）

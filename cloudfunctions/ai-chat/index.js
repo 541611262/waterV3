@@ -6,10 +6,14 @@
 //
 // 环境变量（在云函数配置中修改，保存后下一次提问即生效）：
 //   DEEPSEEK_API_KEY  必填，API 密钥，只保存在这里
-//   AI_MODEL          模型名称，默认 deepseek-flash（可改为 deepseek-v4-pro）
+//   AI_MODEL          「快速」档的模型，默认 deepseek-flash
+//   AI_PRO_MODEL      「高级」档的模型，默认 deepseek-v4-pro
+//   AI_ALLOW_PRO      是否允许同事在聊天窗口选择「高级」档，默认 true；设为 false 则一律用快速档
 //   AI_BASE_URL       接口地址，默认 https://api.deepseek.com
 //   AI_DAILY_LIMIT    每人每天的提问次数，默认 50
-//   AI_MAX_TOKENS     单次回答的最大长度，默认 1500
+//   AI_MAX_TOKENS     单次回答的最大长度，默认 4000
+//   AI_THINKING       默认思考模式：disabled（默认，快、省）/ low / high / max（更慢、更贵，复杂规划时更好）
+//                     同事在聊天窗口选择「深度思考」时，按这里的强度；这里为 disabled 时按 low
 
 const ENV_ID = process.env.CLOUDBASE_ENV_ID || 'water-storage-d0ggf2m9faaadb034';
 const GATEWAY = (process.env.CLOUDBASE_GATEWAY || `https://${ENV_ID}.api.tcloudbasegateway.com`).replace(/\/+$/, '');
@@ -17,14 +21,20 @@ const GATEWAY = (process.env.CLOUDBASE_GATEWAY || `https://${ENV_ID}.api.tcloudb
 const CONFIG = {
     apiKey: process.env.DEEPSEEK_API_KEY || '',
     model: process.env.AI_MODEL || 'deepseek-flash',
+    proModel: process.env.AI_PRO_MODEL || 'deepseek-v4-pro',
+    allowPro: String(process.env.AI_ALLOW_PRO || 'true').toLowerCase() !== 'false',
     baseUrl: (process.env.AI_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, ''),
     dailyLimit: parseInt(process.env.AI_DAILY_LIMIT, 10) || 50,
-    maxTokens: parseInt(process.env.AI_MAX_TOKENS, 10) || 1500
+    maxTokens: parseInt(process.env.AI_MAX_TOKENS, 10) || 4000,
+    thinking: ['low', 'high', 'max'].includes(String(process.env.AI_THINKING || '').toLowerCase())
+        ? String(process.env.AI_THINKING).toLowerCase()
+        : 'disabled'
 };
 
 const MAX_MESSAGES = 40;
 const MAX_USER_CHARS = 2000;
 const MAX_TOOL_CHARS = 16000;
+const MAX_REASONING_CHARS = 20000;
 const MODEL_TIMEOUT_MS = 55000;
 
 // ---------- 工具定义（在浏览器中执行，名称需与 assistant.js 保持一致） ----------
@@ -87,16 +97,12 @@ const TOOLS = [
     }, ['record_id', 'changes'])
 ];
 
-// “今天”以网页传来的日期为准（与页面上到期天数的计算一致）；只接受与服务器时间相差 2 天以内的日期，否则用北京时间
-function resolveToday(clientDate) {
-    const beijing = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
-    let day = beijing;
-    if (typeof clientDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(clientDate)) {
-        const diff = Math.abs(Date.parse(clientDate) - Date.parse(beijing)) / 86400000;
-        if (diff <= 2) day = clientDate;
-    }
-    const weekday = new Intl.DateTimeFormat('zh-CN', { timeZone: 'UTC', weekday: 'long' }).format(new Date(`${day}T00:00:00Z`));
-    return `${day}（${weekday}）`;
+// 系统使用者在中国，“今天”一律按北京时间（与网页上到期天数的计算一致）
+function beijingToday() {
+    const now = new Date();
+    const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(now);
+    const weekday = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', weekday: 'long' }).format(now);
+    return `${day}（${weekday}，北京时间）`;
 }
 
 // 角色只影响回答的措辞；能看到哪些数据完全由数据库 RLS 决定
@@ -106,8 +112,8 @@ function describeRole(role) {
         : '普通成员（只能看到自己负责的客户，看不到其他同事的客户）';
 }
 
-function systemPrompt(userName, clientDate, role) {
-    return `你是「滤芯小助手」，服务于一家净水器公司的滤芯更换提醒系统。当前用户是同事「${userName || '未知'}」，角色：${describeRole(role)}。今天是 ${resolveToday(clientDate)}。
+function systemPrompt(userName, role) {
+    return `你是「滤芯小助手」，服务于一家净水器公司的滤芯更换提醒系统。当前用户是同事「${userName || '未知'}」，角色：${describeRole(role)}。今天是 ${beijingToday()}。
 
 【数据】
 - 客户数据只能通过工具获取，不要编造。查不到就如实说明。
@@ -127,7 +133,14 @@ function systemPrompt(userName, clientDate, role) {
 - 用户口述的跟进情况，整理成简洁的跟踪记录；涉及修改时先用查询工具确认是哪个客户、哪条记录。
 
 【回答】
-- 使用中文，简洁清楚，适当使用列表。排计划时按紧急程度和区域分组。
+- 使用中文，简洁清楚。排计划时按紧急程度和区域分组。
+- 聊天窗口很窄（同事多用手机），格式要适合小屏幕阅读：
+  · 先用一两句话给出结论（例如"共 5 位客户需要联系，最急的是……"），再列明细。
+  · 列出多条记录时优先用列表，每条一行，格式如「[[rec:记录ID|客户名]] · 位置 · 已超期 3 天」。
+  · 只有需要对比少量字段时才用表格，表格最多 4 列、最多 10 行。
+  · 小标题用加粗（**一、本周到期**），不要用 # 标题、分隔线（---）和引用块（>）。
+  · 记录很多时只列最紧急的 10 条，并说明"还有 N 条"，提示可以到「装机记录」页面按状态筛选查看完整列表。
+  · 不要重复工具结果里的全部字段，只写对当前问题有用的信息。
 - 撰写给客户的消息时语气礼貌专业，不承诺价格、优惠等未经确认的信息。
 - 用户问系统怎么用时，可介绍：添加客户 / 装机记录、导入导出 Excel（与《格式样板》19 列一致）、筛选（区域、标记、月份可多选）、批量导出 / 删除、记录换芯、添加跟踪、仪表板与通知。`;
 }
@@ -174,6 +187,10 @@ function sanitizeMessages(raw) {
             clean.push({ role: 'user', content: content.slice(0, MAX_USER_CHARS) });
         } else if (m.role === 'assistant') {
             const message = { role: 'assistant', content: content.slice(0, MAX_TOOL_CHARS) };
+            // 思考模式下带工具调用时，DeepSeek 要求把之前的 reasoning_content 原样传回
+            if (typeof m.reasoning_content === 'string' && m.reasoning_content) {
+                message.reasoning_content = m.reasoning_content.slice(0, MAX_REASONING_CHARS);
+            }
             if (Array.isArray(m.tool_calls) && m.tool_calls.length) {
                 message.tool_calls = m.tool_calls.slice(0, 8).map(call => ({
                     id: String(call.id || ''),
@@ -214,29 +231,57 @@ async function consumeQuota(accessToken, isNewQuestion) {
     return data || {};
 }
 
-function describeModelError(status, text) {
+function describeModelError(status, text, model) {
     if (status === 401) return 'AI 服务的 API Key 无效，请管理员检查 DEEPSEEK_API_KEY';
     if (status === 402) return 'AI 服务账户余额不足，请管理员充值';
     if (status === 429) return 'AI 服务繁忙，请稍后再试';
-    if (status === 400 && /model/i.test(text)) return `模型「${CONFIG.model}」不可用，可能已改名，请管理员检查 AI_MODEL`;
+    if (status === 400 && /model/i.test(text)) return `模型「${model}」不可用，可能已改名，请管理员检查 AI_MODEL / AI_PRO_MODEL`;
     if (status >= 500) return 'AI 服务暂时不可用，请稍后再试';
     return `AI 服务调用失败（HTTP ${status}）`;
 }
 
-async function callModel(messages, userName, clientDate, role) {
+// 思考模式只在历史中每条助手消息都带有 reasoning_content 时开启（否则 DeepSeek 会返回 400）；
+// 旧版网页不回传 reasoning_content，会自动按非思考模式回答，不会出错
+function shouldThink(messages, wanted) {
+    if (!wanted) return false;
+    return messages.every(m => m.role !== 'assistant' || Boolean(m.reasoning_content));
+}
+
+// 网页只能在允许的档位中选择，不能指定任意模型名
+function resolveChoice(input) {
+    const tier = input.model === 'pro' && CONFIG.allowPro ? 'pro' : 'flash';
+    const wantsThinking = typeof input.thinking === 'boolean' ? input.thinking : CONFIG.thinking !== 'disabled';
+    return {
+        tier,
+        model: tier === 'pro' ? CONFIG.proModel : CONFIG.model,
+        thinking: wantsThinking,
+        effort: CONFIG.thinking === 'disabled' ? 'low' : CONFIG.thinking
+    };
+}
+
+async function callModel(messages, userName, role, choiceInput = {}) {
+    const choiceOf = resolveChoice(choiceInput);
+    const thinking = shouldThink(messages, choiceOf.thinking);
+    const sent = thinking ? messages : messages.map(m => {
+        if (m.role !== 'assistant' || !m.reasoning_content) return m;
+        const { reasoning_content: _omit, ...rest } = m;
+        return rest;
+    });
     let response;
     try {
         response = await fetchWithTimeout(`${CONFIG.baseUrl}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${CONFIG.apiKey}` },
             body: JSON.stringify({
-                model: CONFIG.model,
-                messages: [{ role: 'system', content: systemPrompt(userName, clientDate, role) }, ...messages],
+                model: choiceOf.model,
+                messages: [{ role: 'system', content: systemPrompt(userName, role) }, ...sent],
                 tools: TOOLS,
                 tool_choice: 'auto',
                 temperature: 0.3,
                 max_tokens: CONFIG.maxTokens,
-                stream: false
+                stream: false,
+                thinking: { type: thinking ? 'enabled' : 'disabled' },
+                ...(thinking ? { reasoning_effort: choiceOf.effort } : {})
             })
         }, MODEL_TIMEOUT_MS);
     } catch (error) {
@@ -245,7 +290,7 @@ async function callModel(messages, userName, clientDate, role) {
     const text = await response.text();
     if (!response.ok) {
         console.error('model error', response.status, text.slice(0, 500));
-        throw new AppError('MODEL_ERROR', describeModelError(response.status, text));
+        throw new AppError('MODEL_ERROR', describeModelError(response.status, text, choiceOf.model));
     }
     const data = JSON.parse(text);
     const choice = data.choices && data.choices[0];
@@ -254,7 +299,24 @@ async function callModel(messages, userName, clientDate, role) {
     if (Array.isArray(choice.message.tool_calls) && choice.message.tool_calls.length) {
         message.tool_calls = choice.message.tool_calls;
     }
-    return { message, finishReason: choice.finish_reason, usage: data.usage };
+    if (thinking && typeof choice.message.reasoning_content === 'string' && choice.message.reasoning_content) {
+        message.reasoning_content = choice.message.reasoning_content.slice(0, MAX_REASONING_CHARS);
+    }
+    const finishReason = choice.finish_reason;
+    if (!message.content && !message.tool_calls) {
+        // 以前这种情况网页只显示"（没有回答）"，现在给出原因
+        if (finishReason === 'length') {
+            throw new AppError('TRUNCATED', '这个问题需要的回答太长了，请把范围缩小一点再问（例如只问某个区域，或只问今明两天）');
+        }
+        if (finishReason === 'content_filter') {
+            throw new AppError('FILTERED', 'AI 服务拒绝回答这个问题，请换个说法再试');
+        }
+        throw new AppError('EMPTY_ANSWER', 'AI 这次没有给出回答，请换个说法再试');
+    }
+    if (finishReason === 'length' && message.content && !message.tool_calls) {
+        message.content += '\n\n（回答太长，后面的内容被截断了。可以缩小范围再问。）';
+    }
+    return { message, finishReason, usage: data.usage, thinking, tier: choiceOf.tier, model: choiceOf.model };
 }
 
 // ---------- 入口 ----------
@@ -276,8 +338,12 @@ exports.main = async (event) => {
         }
 
         const userName = typeof input.userName === 'string' ? input.userName.slice(0, 50) : '';
-        const result = await callModel(messages, userName, input.today, input.userRole);
-        return { ok: true, message: result.message, finishReason: result.finishReason, remaining: quota.remaining, limit: quota.limit, model: CONFIG.model };
+        const result = await callModel(messages, userName, input.userRole, { model: input.model, thinking: input.thinking });
+        return {
+            ok: true, message: result.message, finishReason: result.finishReason,
+            remaining: quota.remaining, limit: quota.limit, model: result.model, tier: result.tier, thinking: result.thinking,
+            allowPro: CONFIG.allowPro
+        };
     } catch (error) {
         if (error instanceof AppError) return fail(error.code, error.message, error.extra);
         console.error('ai-chat error', error);
@@ -286,4 +352,4 @@ exports.main = async (event) => {
 };
 
 // 供本地测试使用
-exports._internal = { sanitizeMessages, systemPrompt, resolveToday, TOOLS };
+exports._internal = { sanitizeMessages, systemPrompt, beijingToday, TOOLS, shouldThink, resolveChoice, CONFIG };
