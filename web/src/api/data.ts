@@ -454,33 +454,36 @@ export interface DashboardStats {
   revenueThisMonth: number
 }
 
-export async function dashboardStats(uid: string): Promise<DashboardStats> {
+/** ownerId：管理员查看某位成员的数据（设备、应收按负责人，工单按指派，换芯按登记人）；不传则看自己权限内的全部 */
+export async function dashboardStats(uid: string, ownerId?: string): Promise<DashboardStats> {
   const today = todayStr()
   const monthStart = `${today.slice(0, 7)}-01`
   const rdb = await db()
+  const byOwner = (q: Builder) => (ownerId ? q.eq('owner_id', ownerId) : q)
   const [devices, overdue, dueThisWeek, unpaidDue, openWorkOrders, monthRows] = await Promise.all([
-    countOf('device_overview', (q) => q),
-    countOf('device_overview', (q) => q.lt('days_until_due', 0)),
-    countOf('device_overview', (q) => q.gte('days_until_due', 0).lte('days_until_due', 7)),
-    countOf('receivable_overview', (q) => q.eq('settled', false).lte('days_until_remind', 0)),
-    countOf('work_orders', (q) => q.is('deleted_at', null).in('status', ['pending', 'in_progress']).eq('assignee_id', uid)),
+    countOf('device_overview', (q) => byOwner(q)),
+    countOf('device_overview', (q) => byOwner(q).lt('days_until_due', 0)),
+    countOf('device_overview', (q) => byOwner(q).gte('days_until_due', 0).lte('days_until_due', 7)),
+    countOf('receivable_overview', (q) => byOwner(q).eq('settled', false).lte('days_until_remind', 0)),
+    countOf('work_orders', (q) => q.is('deleted_at', null).in('status', ['pending', 'in_progress']).eq('assignee_id', ownerId || uid)),
     rdb
       .from('replacements')
-      .select('cost')
+      .select('cost, created_by')
       .is('deleted_at', null)
       .gte('replaced_on', monthStart)
       .lte('replaced_on', today)
       .limit(10000)
       .then((r: { data?: { cost: number | string }[]; error?: unknown }) => unwrap(r) ?? []),
   ])
+  const mine = (monthRows as { cost: number | string; created_by: string | null }[]).filter((r) => !ownerId || r.created_by === ownerId)
   return {
     devices,
     overdue,
     dueThisWeek,
     unpaidDue,
     openWorkOrders,
-    replacementsThisMonth: monthRows.length,
-    revenueThisMonth: monthRows.reduce((sum: number, r: { cost: number | string }) => sum + Number(r.cost || 0), 0),
+    replacementsThisMonth: mine.length,
+    revenueThisMonth: mine.reduce((sum, r) => sum + Number(r.cost || 0), 0),
   }
 }
 
@@ -637,15 +640,20 @@ export interface ReceivableSummary {
   collectedThisMonth: number
 }
 
-export async function receivableSummary(): Promise<ReceivableSummary> {
+/** ownerId：只统计这位负责人名下客户的应收和收款 */
+export async function receivableSummary(ownerId?: string): Promise<ReceivableSummary> {
   const rdb = await db()
   const monthStart = `${todayStr().slice(0, 7)}-01`
-  const [open, payments] = await Promise.all([
-    rdb.from('receivable_overview').select('amount, outstanding, days_until_remind').eq('settled', false).limit(10000),
-    rdb.from('payments').select('amount').is('deleted_at', null).gte('paid_on', monthStart).limit(10000),
+  let openQuery = rdb.from('receivable_overview').select('amount, outstanding, days_until_remind').eq('settled', false)
+  if (ownerId) openQuery = openQuery.eq('owner_id', ownerId)
+  const [open, payments, owned] = await Promise.all([
+    openQuery.limit(10000),
+    rdb.from('payments').select('amount, client_id').is('deleted_at', null).gte('paid_on', monthStart).limit(10000),
+    ownerId ? rdb.from('clients').select('id').eq('owner_id', ownerId).is('deleted_at', null).limit(10000) : null,
   ])
   const openRows = unwrap<{ amount: unknown; outstanding: unknown; days_until_remind: number | null }[]>(open) ?? []
-  const paymentRows = unwrap<{ amount: unknown }[]>(payments) ?? []
+  const ownedIds = owned ? new Set((unwrap<{ id: string }[]>(owned) ?? []).map((c) => c.id)) : null
+  const paymentRows = (unwrap<{ amount: unknown; client_id: string }[]>(payments) ?? []).filter((p) => !ownedIds || ownedIds.has(p.client_id))
   return {
     openCount: openRows.length,
     outstanding: openRows.reduce((sum, r) => sum + (Number(r.outstanding) || 0), 0),

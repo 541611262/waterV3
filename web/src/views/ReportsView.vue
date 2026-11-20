@@ -2,6 +2,7 @@
 import { Calendar, Coin, Download, Odometer, Tickets, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { utils, writeFile } from 'xlsx'
 import { describeError } from '@/api/cloud'
 import {
@@ -20,11 +21,23 @@ import { aggregateByMonth, countBy, recentMonths } from '@/lib/stats'
 import { useSessionStore } from '@/stores/session'
 
 const session = useSessionStore()
+const route = useRoute()
+const router = useRouter()
 const months = ref(6)
 const loading = ref(false)
-const replacements = ref<ReplacementFact[]>([])
-const devices = ref<DeviceFact[]>([])
-const orders = ref<WorkOrderFact[]>([])
+const allReplacements = ref<ReplacementFact[]>([])
+const allDevices = ref<DeviceFact[]>([])
+const allOrders = ref<WorkOrderFact[]>([])
+
+// 管理员可以只看某位成员：换芯按登记人、设备按负责人、工单按指派 / 完成人（与「成员工作量」一致）
+const viewOwner = ref(session.isAdmin && typeof route.query.owner === 'string' ? route.query.owner : '')
+const viewingName = computed(() => (viewOwner.value ? session.memberName(viewOwner.value) || '该成员' : ''))
+watch(viewOwner, (v) => void router.replace({ query: v ? { owner: v } : {} }))
+const replacements = computed(() => (viewOwner.value ? allReplacements.value.filter((r) => r.created_by === viewOwner.value) : allReplacements.value))
+const devices = computed(() => (viewOwner.value ? allDevices.value.filter((d) => d.owner_id === viewOwner.value) : allDevices.value))
+const orders = computed(() =>
+  viewOwner.value ? allOrders.value.filter((o) => o.assignee_id === viewOwner.value || o.completed_by === viewOwner.value) : allOrders.value,
+)
 
 const monthKeys = computed(() => recentMonths(todayStr(), months.value))
 
@@ -33,9 +46,9 @@ async function load() {
   try {
     const start = `${monthKeys.value[0]}-01`
     const [r, d, o] = await Promise.all([fetchReplacementsSince(start), fetchDeviceFacts(), fetchWorkOrdersSince(start)])
-    replacements.value = r
-    devices.value = d
-    orders.value = o
+    allReplacements.value = r
+    allDevices.value = d
+    allOrders.value = o
   } catch (error) {
     ElMessage.error(describeError(error))
   } finally {
@@ -55,7 +68,8 @@ const withDate = computed(() => devices.value.filter((d) => d.days_until_due !==
 const overdueRate = computed(() =>
   withDate.value.length ? Math.round((withDate.value.filter((d) => d.days_until_due! < 0).length / withDate.value.length) * 1000) / 10 : 0,
 )
-const ordersDone = computed(() => orders.value.filter((o) => o.status === 'done').length)
+const ordersDone = computed(() => orders.value.filter((o) => o.status === 'done' && (!viewOwner.value || o.completed_by === viewOwner.value)).length)
+const ordersCreated = computed(() => (viewOwner.value ? orders.value.filter((o) => o.assignee_id === viewOwner.value).length : orders.value.length))
 
 const monthLabels = computed(() => monthKeys.value.map((m) => `${m.slice(2, 4)}/${m.slice(5)}`))
 
@@ -126,6 +140,7 @@ const workload = computed(() => {
     w.devices++
     if ((d.days_until_due ?? 1) < 0) w.overdue++
   }
+  if (viewOwner.value) return rows.has(viewOwner.value) ? [rows.get(viewOwner.value)!] : []
   return [...rows.values()].sort((a, b) => b.replacements - a.replacements || b.devices - a.devices)
 })
 
@@ -146,7 +161,7 @@ function exportReport() {
   utils.book_append_sheet(wb, workloadSheet, '工作量')
   const regionSheet = utils.aoa_to_sheet([['区域', '设备数', '已超期'], ...regionRows.value.map((r) => [r.name, r.total, r.overdue])])
   utils.book_append_sheet(wb, regionSheet, '区域分布')
-  writeFile(wb, `滤芯业务报表_近${months.value}个月_${todayStr()}.xlsx`)
+  writeFile(wb, `滤芯业务报表_${viewingName.value ? `${viewingName.value}_` : ''}近${months.value}个月_${todayStr()}.xlsx`)
 }
 </script>
 
@@ -159,7 +174,16 @@ function exportReport() {
           <el-radio-button :value="6">近 6 个月</el-radio-button>
           <el-radio-button :value="12">近 12 个月</el-radio-button>
         </el-radio-group>
-        <span class="text-muted scope">{{ session.isAdmin ? '统计范围：全部数据' : '统计范围：你负责的客户和被派单的客户' }}</span>
+        <el-select v-if="session.isAdmin" v-model="viewOwner" clearable filterable placeholder="全部成员" class="owner-sel">
+          <el-option v-for="m in session.directory" :key="m.uid" :label="m.username" :value="m.uid" />
+        </el-select>
+        <span class="text-muted scope">{{
+          viewingName
+            ? `统计范围：${viewingName}登记的换芯、负责的设备、指派或完成的工单`
+            : session.isAdmin
+              ? '统计范围：全部数据'
+              : '统计范围：你负责的客户和被派单的客户'
+        }}</span>
         <div class="spacer" />
         <el-button :icon="Download" @click="exportReport">导出报表</el-button>
       </div>
@@ -168,7 +192,7 @@ function exportReport() {
     <div class="stats">
       <StatCard label="换芯次数" :value="totals.count" :icon="Calendar" tone="primary" :hint="`共 ${totals.quantity} 支滤芯`" />
       <StatCard label="换芯收入" :value="formatMoney(totals.revenue)" :icon="Coin" tone="success" hint="按换芯记录的费用统计" />
-      <StatCard label="完成工单" :value="ordersDone" :icon="Tickets" tone="violet" :hint="`期间新建 ${orders.length} 张`" />
+      <StatCard label="完成工单" :value="ordersDone" :icon="Tickets" tone="violet" :hint="viewingName ? `期间指派给他 ${ordersCreated} 张` : `期间新建 ${ordersCreated} 张`" />
       <StatCard label="超期率" :value="`${overdueRate}%`" :icon="WarningFilled" :tone="overdueRate > 30 ? 'danger' : 'warning'" :hint="`${withDate.length} 台有到期日期的设备`" />
       <StatCard label="在保设备" :value="devices.length" :icon="Odometer" tone="info" hint="当前全部装机记录" />
     </div>
@@ -231,6 +255,9 @@ function exportReport() {
 }
 .scope {
   font-size: 12px;
+}
+.owner-sel {
+  width: 150px;
 }
 .spacer {
   flex: 1;

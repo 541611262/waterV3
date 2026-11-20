@@ -39,7 +39,7 @@ watch(
 )
 const keywordDebounced = refDebounced(keyword, 300)
 const statuses = ref<DeviceStatusKey[]>(initialStatuses)
-const ownerId = ref('')
+const ownerId = ref(session.isAdmin && typeof route.query.owner === 'string' ? route.query.owner : '')
 const region = ref('')
 const regions = ref<string[]>([])
 const viewMode = useStorage<'table' | 'card'>('v4.devices.view', 'table')

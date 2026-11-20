@@ -30,7 +30,7 @@ const TABS: { key: Tab; label: string; statuses?: WorkOrderStatus[] }[] = [
 const tab = ref<Tab>((route.query.tab as Tab) || 'mine')
 const keyword = ref('')
 const keywordDebounced = refDebounced(keyword, 300)
-const assigneeId = ref('')
+const assigneeId = ref(typeof route.query.assignee === 'string' ? route.query.assignee : '')
 
 const list = usePagedList<WorkOrderRow>(
   (q) => {

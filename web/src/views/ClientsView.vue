@@ -2,7 +2,7 @@
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { refDebounced, useMediaQuery } from '@vueuse/core'
 import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { listClients, listRegions } from '@/api/data'
 import type { Client, ClientOverview } from '@/api/types'
 import ClientFormDialog from '@/components/ClientFormDialog.vue'
@@ -13,12 +13,13 @@ import { formatMoney } from '@/lib/format'
 import { useSessionStore } from '@/stores/session'
 
 const session = useSessionStore()
+const route = useRoute()
 const router = useRouter()
 const isMobile = useMediaQuery('(max-width: 768px)')
 
 const keyword = ref('')
 const keywordDebounced = refDebounced(keyword, 300)
-const ownerId = ref('')
+const ownerId = ref(session.isAdmin && typeof route.query.owner === 'string' ? route.query.owner : '')
 const region = ref('')
 const dueOnly = ref(false)
 const unpaidOnly = ref(false)

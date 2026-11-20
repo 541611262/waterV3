@@ -2,7 +2,7 @@
 import { Bell, Coin, Plus, Refresh, Search, Tickets, Wallet } from '@element-plus/icons-vue'
 import { refDebounced, useMediaQuery } from '@vueuse/core'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { describeError } from '@/api/cloud'
 import { listReceivables, receivableSummary, updateReceivable, type ReceivableQuery, type ReceivableSummary } from '@/api/data'
@@ -29,7 +29,7 @@ const TABS: { key: Status; label: string }[] = [
 const status = ref<Status>((route.query.status as Status) || 'due')
 const keyword = ref('')
 const keywordDebounced = refDebounced(keyword, 300)
-const ownerId = ref('')
+const ownerId = ref(session.isAdmin && typeof route.query.owner === 'string' ? route.query.owner : '')
 const summary = ref<ReceivableSummary | null>(null)
 
 const list = usePagedList<ReceivableOverview>(
@@ -37,9 +37,13 @@ const list = usePagedList<ReceivableOverview>(
   { watchSources: [status, keywordDebounced, ownerId] },
 )
 
-async function refresh() {
-  await Promise.all([list.load(), receivableSummary().then((s) => (summary.value = s)).catch(() => undefined)])
+async function loadSummary() {
+  summary.value = await receivableSummary(ownerId.value || undefined).catch(() => summary.value)
 }
+async function refresh() {
+  await Promise.all([list.load(), loadSummary()])
+}
+watch(ownerId, loadSummary)
 
 const formDialog = ref(false)
 const editing = ref<ReceivableOverview | null>(null)

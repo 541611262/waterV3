@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { AlarmClock, Calendar, Coin, Cpu, Refresh, Tickets, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { describeError } from '@/api/cloud'
 import {
   dashboardStats,
@@ -25,6 +26,20 @@ import { aggregateByMonth, dueDistribution, recentMonths, type MonthlyRow } from
 import { useSessionStore } from '@/stores/session'
 
 const session = useSessionStore()
+const route = useRoute()
+const router = useRouter()
+
+// 管理员可以切换查看某位成员的数据；空 = 全部
+const viewOwner = ref(session.isAdmin && typeof route.query.owner === 'string' ? route.query.owner : '')
+const viewingName = computed(() => (viewOwner.value ? session.memberName(viewOwner.value) || '该成员' : ''))
+/** 跳转到列表页时带上当前查看的成员 */
+function withOwner(path: string): string {
+  return viewOwner.value ? `${path}${path.includes('?') ? '&' : '?'}owner=${viewOwner.value}` : path
+}
+watch(viewOwner, (v) => {
+  void router.replace({ query: v ? { owner: v } : {} })
+  void load()
+})
 
 const loading = ref(false)
 const stats = ref<DashboardStats | null>(null)
@@ -47,13 +62,14 @@ async function load() {
   loading.value = true
   try {
     const months = recentMonths(todayStr(), 6)
+    const owner = viewOwner.value || undefined
     const [s, devices, receivables, replacements, facts, orders] = await Promise.all([
-      dashboardStats(session.uid),
-      listDevices({ page: 1, pageSize: 8, statuses: ['overdue', 'today', 'week'], sort: { field: 'next_due_on', order: 'asc' } }),
-      listReceivables({ page: 1, pageSize: 6, status: 'due' }),
+      dashboardStats(session.uid, owner),
+      listDevices({ page: 1, pageSize: 8, statuses: ['overdue', 'today', 'week'], ownerId: owner, sort: { field: 'next_due_on', order: 'asc' } }),
+      listReceivables({ page: 1, pageSize: 6, status: 'due', ownerId: owner }),
       fetchReplacementsSince(`${months[0]}-01`),
       fetchDeviceFacts(),
-      listWorkOrders({ page: 1, pageSize: 5, statuses: ['pending', 'in_progress'], assigneeId: session.uid, sort: { field: 'scheduled_on', order: 'asc' } }),
+      listWorkOrders({ page: 1, pageSize: 5, statuses: ['pending', 'in_progress'], assigneeId: owner || session.uid, sort: { field: 'scheduled_on', order: 'asc' } }),
     ])
     stats.value = s
     dueDevices.value = devices.rows
@@ -61,8 +77,8 @@ async function load() {
     remind.value = receivables.rows
     remindTotal.value = receivables.total
     myOrders.value = orders.rows
-    monthly.value = aggregateByMonth(replacements, months)
-    distribution.value = dueDistribution(facts.map((f) => f.days_until_due))
+    monthly.value = aggregateByMonth(owner ? replacements.filter((r) => r.created_by === owner) : replacements, months)
+    distribution.value = dueDistribution((owner ? facts.filter((f) => f.owner_id === owner) : facts).map((f) => f.days_until_due))
   } catch (error) {
     ElMessage.error(describeError(error))
   } finally {
@@ -120,7 +136,7 @@ onMounted(load)
   <div v-loading="loading && !stats" class="page">
     <section class="hero">
       <div>
-        <h2>{{ greeting }}，{{ session.member?.username }}</h2>
+        <h2>{{ greeting }}，{{ session.member?.username }}<span v-if="viewingName" class="viewing">正在查看：{{ viewingName }}</span></h2>
         <p>
           {{ todayStr() }} {{ weekday }}（北京时间）·
           <template v-if="stats">
@@ -129,30 +145,42 @@ onMounted(load)
           </template>
         </p>
       </div>
-      <el-button :icon="Refresh" round @click="load">刷新</el-button>
+      <div class="hero-actions">
+        <el-select v-if="session.isAdmin" v-model="viewOwner" clearable filterable placeholder="查看全部成员" class="owner-sel">
+          <el-option v-for="m in session.directory" :key="m.uid" :label="m.username" :value="m.uid" />
+        </el-select>
+        <el-button :icon="Refresh" round @click="load">刷新</el-button>
+      </div>
     </section>
 
     <div class="stats">
-      <StatCard label="已超期" :value="stats?.overdue ?? '—'" :icon="WarningFilled" tone="danger" hint="需要尽快安排换芯" to="/devices?status=overdue" />
-      <StatCard label="7 天内到期" :value="stats?.dueThisWeek ?? '—'" :icon="AlarmClock" tone="warning" hint="提前联系客户预约" to="/devices?status=today,week" />
-      <StatCard label="应催款" :value="stats?.unpaidDue ?? '—'" :icon="Coin" tone="violet" hint="已到催款日期的应收" to="/payments" />
-      <StatCard label="我的待办工单" :value="stats?.openWorkOrders ?? '—'" :icon="Tickets" tone="primary" hint="指派给我、未完成" to="/work-orders" />
-      <StatCard label="设备总数" :value="stats?.devices ?? '—'" :icon="Cpu" tone="info" hint="在保的装机记录" to="/devices" />
+      <StatCard label="已超期" :value="stats?.overdue ?? '—'" :icon="WarningFilled" tone="danger" hint="需要尽快安排换芯" :to="withOwner('/devices?status=overdue')" />
+      <StatCard label="7 天内到期" :value="stats?.dueThisWeek ?? '—'" :icon="AlarmClock" tone="warning" hint="提前联系客户预约" :to="withOwner('/devices?status=today,week')" />
+      <StatCard label="应催款" :value="stats?.unpaidDue ?? '—'" :icon="Coin" tone="violet" hint="已到催款日期的应收" :to="withOwner('/payments')" />
+      <StatCard
+        :label="viewingName ? `${viewingName}的待办工单` : '我的待办工单'"
+        :value="stats?.openWorkOrders ?? '—'"
+        :icon="Tickets"
+        tone="primary"
+        :hint="viewingName ? '指派给他、未完成' : '指派给我、未完成'"
+        :to="viewOwner ? `/work-orders?tab=open&assignee=${viewOwner}` : '/work-orders'"
+      />
+      <StatCard label="设备总数" :value="stats?.devices ?? '—'" :icon="Cpu" tone="info" hint="在保的装机记录" :to="withOwner('/devices')" />
       <StatCard
         label="本月换芯"
         :value="stats?.replacementsThisMonth ?? '—'"
         :icon="Calendar"
         tone="success"
         :hint="stats ? `收入 ${formatMoney(stats.revenueThisMonth)}` : ''"
-        to="/reports"
+        :to="withOwner('/reports')"
       />
     </div>
 
     <el-card v-if="myOrders.length" shadow="never">
       <template #header>
         <div class="card-header">
-          <span>我的工单 <em class="count">{{ stats?.openWorkOrders ?? myOrders.length }}</em></span>
-          <router-link to="/work-orders" class="more">去处理 →</router-link>
+          <span>{{ viewingName ? `${viewingName}的工单` : '我的工单' }} <em class="count">{{ stats?.openWorkOrders ?? myOrders.length }}</em></span>
+          <router-link :to="viewOwner ? `/work-orders?tab=open&assignee=${viewOwner}` : '/work-orders'" class="more">{{ viewOwner ? '查看 →' : '去处理 →' }}</router-link>
         </div>
       </template>
       <router-link v-for="o in myOrders" :key="o.id" to="/work-orders" class="item order">
@@ -175,7 +203,7 @@ onMounted(load)
         <template #header>
           <div class="card-header">
             <span>需要换芯 <em class="count">{{ dueTotal }}</em></span>
-            <router-link to="/devices?status=overdue,today,week" class="more">全部 →</router-link>
+            <router-link :to="withOwner('/devices?status=overdue,today,week')" class="more">全部 →</router-link>
           </div>
         </template>
         <el-empty v-if="!dueDevices.length" description="近期没有需要换芯的设备" :image-size="72" />
@@ -200,7 +228,7 @@ onMounted(load)
         <template #header>
           <div class="card-header">
             <span>应催款 <em class="count">{{ remindTotal }}</em></span>
-            <router-link to="/payments" class="more">全部 →</router-link>
+            <router-link :to="withOwner('/payments')" class="more">全部 →</router-link>
           </div>
         </template>
         <el-empty v-if="!remind.length" description="没有需要催款的应收" :image-size="72" />
@@ -222,7 +250,7 @@ onMounted(load)
         <template #header>
           <div class="card-header">
             <span>近 6 个月换芯趋势</span>
-            <router-link to="/reports" class="more">查看报表 →</router-link>
+            <router-link :to="withOwner('/reports')" class="more">查看报表 →</router-link>
           </div>
         </template>
         <AppChart :option="trendOption" height="260px" />
@@ -257,6 +285,25 @@ onMounted(load)
   margin: 0;
   font-size: 22px;
   font-weight: 700;
+}
+.viewing {
+  margin-left: 12px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--brand-50);
+  color: var(--brand-600);
+  font-size: 13px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.owner-sel {
+  width: 160px;
 }
 .hero p {
   margin: 6px 0 0;
